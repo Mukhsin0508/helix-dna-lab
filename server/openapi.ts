@@ -1,3 +1,4 @@
+import { analysisPaths, analysisSchemas } from "../shared/analysis-openapi.ts";
 import { workspacePaths, workspaceSchemas } from "../shared/workbench-openapi.ts";
 
 const sessionReference = { $ref: "#/components/schemas/Session" };
@@ -47,14 +48,14 @@ const actionBody = {
   },
 };
 
-/** Portable API contract; authentication must be added before any public deployment. */
+/** Public-result collaboration contract; account authorization is required for private data. */
 export const openApiDocument = {
   openapi: "3.1.0",
   info: {
-    title: "Helix Workspace API",
-    version: "1.1.0",
+    title: "Helix Analysis API",
+    version: "1.2.0",
     description:
-      "Local educational DNA explorer. Sessions persist in SQLite and use optimistic revisions. Runs return unchanged when the alternate matches the reference base, replayed for the predefined curated mutation, and unscored for other mutations. This API does not call AlphaGenome or generate scientific scores. The current server listens only on 127.0.0.1, has no authentication, and is not a public session-sharing service. Add authentication and authorization before public deployment. Request bodies are limited to 16 KiB; API clients are limited to 300 requests per minute per IP.",
+      "Analytical workspace for imported and published AlphaGenome results. Save datasets, figure settings and provenance together; updates use optimistic revisions. Analyses accept up to 5000 rows and 2 MiB per request. Collaboration links grant read and edit access; no account-level authentication. Use public or non-sensitive research results. No live model or Atlas request is made. Historical replay/session endpoints remain available.",
   },
   servers: [
     {
@@ -64,6 +65,7 @@ export const openApiDocument = {
   ],
   paths: {
     ...workspacePaths,
+    ...analysisPaths,
     "/api/health": {
       get: {
         operationId: "getHealth",
@@ -257,6 +259,7 @@ export const openApiDocument = {
   components: {
     schemas: {
       ...workspaceSchemas,
+      ...analysisSchemas,
       Error: {
         type: "object",
         required: ["error", "message"],

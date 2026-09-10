@@ -3,6 +3,8 @@ import { DEFAULT_EXPERIMENT, EXPERIMENTS } from '../shared/experiments'
 import type { LabSession } from '../shared/types'
 import { WORKSPACE_BODY_LIMIT } from '../shared/workbench'
 import { handleWorkspaceRequest } from './workbench.server'
+import { ANALYSIS_BODY_LIMIT } from '../shared/analysis-record'
+import { handleAnalysisRequest } from './analyses.server'
 
 /** Only the D1 operations used by this API; tests provide real SQLite statements. */
 export interface LabStatement {
@@ -148,6 +150,8 @@ export function createLabHandler(db: LabDatabase | undefined): (request: Request
         if (origin && origin !== url.origin) throw new RequestFailure(403, 'Cross-site changes are not allowed.')
       }
       await budget(db, request)
+      const analysisResponse = await handleAnalysisRequest(db, request, req => body(req, ANALYSIS_BODY_LIMIT))
+      if (analysisResponse) return analysisResponse
       const workspaceResponse = await handleWorkspaceRequest(db, request, req => body(req, method === 'PATCH' ? WORKSPACE_BODY_LIMIT : BODY_LIMIT))
       if (workspaceResponse) return workspaceResponse
       if (pathname === '/api/sessions' && method === 'POST') {

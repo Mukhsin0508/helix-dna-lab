@@ -1,3 +1,19 @@
+# Analytical API
+
+The current figure workspace uses these endpoints. Older session endpoints below remain for compatibility.
+
+| Method | Path | Result |
+|---|---|---|
+| POST | `/api/analyses` | Saves `{dataset, settings}`; returns `{analysis}` with UUID and revision 0. |
+| GET | `/api/analyses/:id` | Returns complete dataset, provenance, figure recipe and revision. |
+| PATCH | `/api/analyses/:id` | Accepts `{revision, dataset, settings}`. Atomic revision conflict returns 409 and the latest analysis. |
+
+The `scores` dataset accepts the documented normalized AlphaGenome columns in `shared/analysis.ts`; `tracks` accepts chromosome, zero-based position, reference/alternate numeric signals and track name. A dataset requires an explicit assembly and source metadata. Maximum 5000 rows, 2 MiB. The API stores supplied values without inference. It does not fetch source URLs or validate reference alleles.
+
+Analysis links grant view/edit access to anyone holding the URL. Use public or non-sensitive results. Local CSV/JSON drafts are not uploaded until Save or Share. Do not put service keys in these requests. The public OpenAPI contract includes all dataset and figure schemas.
+
+## Historical APIs
+
 # DNA Lab API
 
 ## Saved comparison workspaces

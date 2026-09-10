@@ -1,6 +1,22 @@
 # Helix DNA Lab — worklist
 
-## Current direction: outcome and evidence workspace
+## Current direction: analytical generators
+
+The owner selected data-driven analytical tools using AlphaGenome Atlas as the reference. Generated imagery and the outcome/replay interface are superseded as the product's main workflow. The full goal remains a DNA Engineering Lab, including real model execution and experimental validation; figure generation alone does not complete it.
+
+- [x] Study official Atlas tools, API, data access, scorer semantics and limitations.
+- [x] Retrieve and preserve a real published 524-row AlphaGenome snapshot with exact numbers and source provenance.
+- [x] Implement typed CSV/JSON imports, coordinate validation and compatible comparison groups.
+- [x] Implement dataset + figure persistence with revision checks in SQLite and D1.
+- [x] Verify analytical figure rendering, filtering, imports and SVG/PNG/CSV/recipe exports in the browser.
+- [x] Deploy and verify this analytical version publicly, including saved figure settings restored from D1.
+- [ ] Connect live Atlas lookup or an authorized AlphaGenome service, with job status and recorded model version.
+- [ ] Add compatible experimental-result imports and prediction-versus-measurement analysis.
+- [ ] Validate utility with a research workflow and held-out measurements.
+- [ ] Add account ownership before accepting private genomic results or paid model execution.
+- [ ] Expose the analytical tools through AllMCP to ChatGPT and Claude.
+
+## Historical direction: outcome and evidence workspace
 
 The owner replaced the guided educational journey with a spacious workspace for investigating outcomes and rapidly comparing alternatives. The older release checklist below is historical, not the current product acceptance criteria. See [the outcome workspace contract](docs/OUTCOME_WORKSPACE.md).
 
@@ -45,7 +61,7 @@ Saving a hypothesis or changing an illustration does not run a model. Vaccine su
 - [ ] Connect ChatGPT first, then Claude, as the conversation interface; no in-app chat or LangChain needed for the MVP.
 - [ ] Link each chat to the same experiment session displayed in the website.
 - [ ] Provide MCP tools to create, edit, run, inspect, compare, and export experiments.
-- [ ] Add authenticated, on-demand Higgsfield concept generation and shareable media.
+- Superseded: on-demand Higgsfield concept generation; the owner removed it from the analytical workflow.
 - [ ] Consider integration into Higgsfield's official MCP after validation.
 
 ## Product constraints

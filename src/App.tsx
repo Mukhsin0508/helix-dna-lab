@@ -1,310 +1,163 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ArrowDownToLine, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Dna,
-  Expand, ExternalLink, FlaskConical, Layers2, Link2, Menu,
-  Pause, Play, Plus, RotateCcw, Search, Settings2, SplitSquareHorizontal, Trash2, X,
-} from "lucide-react";
-import { DEFAULT_EXPERIMENT } from "../shared/experiments";
-import { SICKLE_CELL_EVIDENCE as EVIDENCE } from "../shared/outcomes";
-import { workspaceToJSON, type Candidate } from "../shared/workbench";
-import type { Base, ViewMode } from "../shared/types";
-import MolecularScene from "./components/MolecularScene";
-import OutcomeScene from "./components/OutcomeScene";
-import { useWorkbench } from "./useWorkbench";
-import { useLab } from "./useLab";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, CircleHelp, Copy, Database, ExternalLink, FileJson, FileSpreadsheet, GitBranch, Info, Link2, Menu, PanelLeftClose, Plus, Save, Settings2, SlidersHorizontal, Table2, Upload, X, ChartNoAxesColumnIncreasing, Grid2X2, ChartNoAxesCombined } from 'lucide-react';
+import type { AnalysisDataset, ScoreRow } from '../shared/analysis';
+import { analysisCreateSchema, figureSettingsSchema, type FigureSettings } from '../shared/analysis-record';
+import { datasetToCSV, parseDatasetJSON, parseScoreCSV, parseTrackCSV } from '../shared/analysis-import';
+import { comparisonKey, csvForRows, DEFAULT_DATASET, defaultSettings, distinct, downloadFile, exportFigure, formatScore, importProvenance, matchingRows, modalityLabel, PUBLISHED_PROVENANCE, rankedRows, scorerLabel, trackGroups, trackLabel, unitLabel } from './analysisUtils';
+import AnalysisFigure from './components/AnalysisFigure';
+import { useAnalysis } from './useAnalysis';
 
-const BASES: Base[] = ["A", "C", "G", "T"];
-const normalizeCandidate = (candidate: Candidate): Candidate => ({ ...candidate, title: candidate.title.trim(), question: candidate.question.trim() });
-const STUDY = DEFAULT_EXPERIMENT;
-const kindLabel = (candidate: Candidate): string => candidate.scenario === "sickle-cell" ? "Blood cell function" : "Mutation effects";
-const variantState = (candidate: Candidate): "published" | "unchanged" | "unscored" => candidate.alternate === STUDY.referenceSequence[candidate.selectedIndex]
-  ? "unchanged" : candidate.selectedIndex === 20 && candidate.alternate === "A" ? "published" : "unscored";
-const evidenceLabel = (candidate: Candidate): string => candidate.scenario === "sickle-cell" ? "Historical trial" : variantState(candidate) === "published" ? "Published finding" : variantState(candidate) === "unchanged" ? "Unchanged sequence" : "Not assessed";
-
-function EvidencePanel({ candidate }: { candidate: Candidate }) {
-  if (candidate.scenario === "sickle-cell") return <div className="evidence-content">
-    <span className="evidence-tag"><span /> Historical trial result</span>
-    <div className="clinical-fraction"><strong>{EVIDENCE.responders}</strong><span>/ {EVIDENCE.evaluable}</span></div>
-    <h3>Evaluable participants met the endpoint.</h3>
-    <p>{EVIDENCE.endpoint}</p>
-    <dl className="evidence-facts"><div><dt>Treated</dt><dd>44 participants</dd></div><div><dt>Evaluable</dt><dd>31 participants</dd></div><div><dt>Design</dt><dd>Single-arm trial</dd></div><div><dt>Reported</dt><dd>8 December 2023</dd></div></dl>
-    <p className="evidence-context">31 of 44 treated participants had sufficient follow-up. This observation is not an individual success or cure probability.</p>
-    <a className="source-link" href={EVIDENCE.sourceUrl} target="_blank" rel="noreferrer">Read the FDA report <ArrowUpRight size={16} /></a>
-    <details className="evidence-details"><summary>Treatment context <ChevronDown size={15} /></summary><p>{EVIDENCE.limitations}</p></details>
-  </div>;
-  const state = variantState(candidate);
-  return <div className="evidence-content">
-    <span className={`evidence-tag ${state === "unscored" ? "unassessed" : ""}`}><span /> {evidenceLabel(candidate)}</span>
-    {state === "published" ? <><div className="clinical-fraction"><strong>39</strong><span>RNA bases</span></div><h3>A different splice site changes the message.</h3><p>The published G → A variant retained 39 extra RNA bases, adding 13 amino acids to the protein.</p><p className="evidence-context">The study reported minigene evidence for altered splicing. The scene replays that finding; it does not run AlphaGenome.</p></>
-      : state === "unchanged" ? <><h3>The sequence is unchanged.</h3><p>The alternate letter matches the reference. No mutation has been introduced.</p></>
-        : <><h3>This edit has no result yet.</h3><p>Your alternative is saved as a question. No model output or experiment is available for this edit.</p></>}
-    <dl className="evidence-facts"><div><dt>Gene</dt><dd>DNM1</dd></div><div><dt>Assembly</dt><dd>GRCh38</dd></div><div><dt>Position</dt><dd>{(STUDY.locus.start + candidate.selectedIndex).toLocaleString("en-US")}</dd></div><div><dt>Change</dt><dd>{STUDY.referenceSequence[candidate.selectedIndex]} → {candidate.alternate}</dd></div></dl>
-    <a className="source-link" href={STUDY.sources[0].url} target="_blank" rel="noreferrer">Read the Atlas study <ArrowUpRight size={16} /></a>
-    <details className="evidence-details"><summary>Reference verification <ChevronDown size={15} /></summary><p>41 bases, chromosome 9, forward strand. Independently verified against UCSC and Ensembl.</p>{STUDY.sources.slice(2).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title} <ExternalLink size={12} /></a>)}</details>
-  </div>;
+type ImportKind = 'json' | 'scores' | 'tracks';
+const CHARTS = [{ id: 'bars', label: 'Score plot', icon: ChartNoAxesColumnIncreasing }, { id: 'heatmap', label: 'Matrix', icon: Grid2X2 }, { id: 'tracks', label: 'Tracks', icon: ChartNoAxesCombined }, { id: 'table', label: 'Data', icon: Table2 }] as const;
+function Modal({ title, children, footer, onClose, drawer = false }: { title: string; children: ReactNode; footer?: ReactNode; onClose: () => void; drawer?: boolean }) {
+  const container = useRef<HTMLDivElement>(null); const closeRef = useRef(onClose); closeRef.current = onClose;
+  useEffect(() => { const previous = document.activeElement as HTMLElement | null; container.current?.querySelector<HTMLElement>('button,input,textarea,select,a')?.focus();
+    const key = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') closeRef.current();
+      if (event.key !== 'Tab') return;
+      const items = [...(container.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href]') || [])].filter(item => item.offsetParent !== null);
+      if (!items.length) return;
+      if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1)?.focus(); }
+      if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus(); }
+    }; document.addEventListener('keydown', key); return () => { document.removeEventListener('keydown', key); previous?.focus(); }; }, []);
+  return <div className={drawer ? 'drawer-backdrop' : 'modal-backdrop'} onClick={event => { if (event.target === event.currentTarget) onClose(); }}><div className={drawer ? 'evidence-drawer' : 'modal'} ref={container} role="dialog" aria-modal="true" aria-label={title}>
+    <div className="modal-header"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={18}/></button></div>
+    {children}{footer && <div className="modal-footer">{footer}</div>}
+  </div></div>;
 }
-
-/** The existing replay API remains the only authority for replay status. */
-function MutationViewport({ workspaceId, candidate, compare, resetKey, onSelect }: { workspaceId: string; candidate: Candidate; compare: boolean; resetKey: number; onSelect: (index: number) => void }) {
-  const { session, experiment, busy, error, mutate, clearError } = useLab({ replayKey: `${workspaceId}:${candidate.id}` });
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [view, setView] = useState<ViewMode>("dna");
-  const [sceneError, setSceneError] = useState("");
-  const [retry, setRetry] = useState(0);
-  const progressRef = useRef(0);
-  const restoredSession = useRef<string | undefined>(undefined);
-  const sessionMatches = Boolean(session && session.selectedIndex === candidate.selectedIndex && session.alternate === candidate.alternate);
-  const curated = variantState(candidate) === "published";
-  const replayed = sessionMatches && curated && session?.status === "replayed";
-
-  useEffect(() => {
-    if (session && restoredSession.current !== session.id) {
-      restoredSession.current = session.id;
-      setView(session.view);
-    }
-  }, [session?.id]);
-  useEffect(() => {
-    setPlaying(false); setProgress(0); progressRef.current = 0;
-    if (session && !sessionMatches) void mutate("patch", { selectedIndex: candidate.selectedIndex, alternate: candidate.alternate });
-  }, [candidate.selectedIndex, candidate.alternate, session?.id, sessionMatches, mutate]);
-  useEffect(() => {
-    if (sessionMatches && session && !playing) { setProgress(session.progress); progressRef.current = session.progress; }
-  }, [session?.progress, sessionMatches]);
-  useEffect(() => {
-    if (!playing) return;
-    let frame = 0, previous = performance.now();
-    const tick = (now: number): void => {
-      progressRef.current = Math.min(1, progressRef.current + Math.min(now - previous, 100) / 16000);
-      previous = now; setProgress(progressRef.current);
-      if (progressRef.current < 1) frame = requestAnimationFrame(tick);
-      else { setPlaying(false); void mutate("patch", { progress: 1 }); }
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [playing, mutate]);
-  async function replay(): Promise<void> {
-    if (playing) { setPlaying(false); await mutate("patch", { progress: progressRef.current }); return; }
-    if (replayed && progressRef.current > 0 && progressRef.current < 1) { setView("rna"); setPlaying(true); return; }
-    const next = await mutate("run");
-    if (next?.status === "replayed") { setView("rna"); setProgress(0); progressRef.current = 0; setPlaying(true); }
+function ImportDialog({ onClose, onImport, initialKind = 'json' }: { onClose: () => void; onImport: (dataset: AnalysisDataset, settings?: FigureSettings) => void; initialKind?: ImportKind }) {
+  const [kind, setKind] = useState<ImportKind>(initialKind), [text, setText] = useState(''), [filename, setFilename] = useState(''), [assembly, setAssembly] = useState(''), [label, setLabel] = useState(''), [sourceUrl, setSourceUrl] = useState(''), [error, setError] = useState('');
+  async function readFile(file?: File): Promise<void> { if (!file) return; if (file.size > 2 * 1024 * 1024) { setError('Choose a file smaller than 2 MB.'); return; } setText(await file.text()); setFilename(file.name); if (/\.json$/i.test(file.name)) setKind('json'); setError(''); }
+  function template(): void {
+    const value = kind === 'json' ? JSON.stringify({ ...DEFAULT_DATASET, title: 'Published example · four ATAC scores', rows: DEFAULT_DATASET.rows.filter(row => row.modality === 'ATAC') }, null, 2)
+      : kind === 'scores' ? datasetToCSV({ ...DEFAULT_DATASET, rows: DEFAULT_DATASET.rows.filter(row => row.modality === 'ATAC') }) : 'chromosome,position,reference,alternate,track\n';
+    downloadFile(value, kind === 'json' ? 'helix-dataset-example.json' : kind === 'scores' ? 'published-atac-example.csv' : 'reference-alternate-template.csv', kind === 'json' ? 'application/json' : 'text/csv');
   }
-  return <div className="mutation-view">
-    <div className="mutation-stage">
-      {session && experiment ? <MolecularScene key={retry} view={view} compare={compare} progress={replayed ? progress : 0}
-        playing={playing} ambient={playing} selectedIndex={candidate.selectedIndex} alternate={candidate.alternate}
-        sequence={experiment.referenceSequence} onSelectBase={onSelect} resetKey={resetKey}
-        rnaHasEvidence={replayed} rnaIsUnchanged={variantState(candidate) === "unchanged"}
-        onError={setSceneError} onReady={() => setSceneError("")} /> : <div className="scene-loading">Opening the reference sequence…</div>}
-      <div className="scene-topline"><span className="scene-chip">DNM1 <span>chr9:{STUDY.locus.start + candidate.selectedIndex}</span></span>
-        <div className="view-switch" aria-label="Molecular view">{(["cell", "dna", "rna"] as ViewMode[]).map(item => <button key={item} aria-pressed={view === item} onClick={() => { setView(item); setPlaying(false); if (sessionMatches) void mutate("patch", { view: item, progress: progressRef.current }); }}>{item === "cell" ? "Cell" : item.toUpperCase()}</button>)}</div></div>
-      {sceneError && <div className="scene-recovery" role="status"><span>{sceneError} Editing and evidence remain available.</span><button onClick={() => setRetry(value => value + 1)}>Retry 3D</button></div>}
-      <div className="scene-disclosure">Illustrative 3D · published replay only</div>
-    </div>
-    <div className="viewport-playbar">
-      <button className="play-button" disabled={busy || !sessionMatches || !curated} onClick={() => { void replay(); }}>{playing ? <Pause size={16} /> : <Play size={16} />}<span>{playing ? "Pause replay" : replayed && progress > 0 && progress < 1 ? "Resume replay" : "Replay finding"}</span></button>
-      <input aria-label="Replay progress" type="range" min="0" max="1" step="0.001" value={replayed ? progress : 0} disabled={!replayed || busy}
-        onChange={event => { setPlaying(false); const next = Number(event.target.value); setProgress(next); progressRef.current = next; }}
-        onPointerUp={() => { if (replayed) void mutate("patch", { progress: progressRef.current }); }}
-        onKeyUp={() => { if (replayed) void mutate("patch", { progress: progressRef.current }); }} />
-      <span className="time-label">{Math.round(progress * 16)} / 16s</span>
-    </div>
-    {error && <div className="inline-error" role="alert">{error}<button aria-label="Dismiss replay error" onClick={clearError}><X size={15} /></button></div>}
-  </div>;
-}
-
-export default function App() {
-  const { workspace, error, busy, saveCandidates, clearError } = useWorkbench();
-  const [draft, setDraft] = useState<Candidate>();
-  const [search, setSearch] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [tab, setTab] = useState<"evidence" | "notes">("evidence");
-  const [compare, setCompare] = useState(true);
-  const [playing, setPlaying] = useState(true);
-  const [resetKey, setResetKey] = useState(0);
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [notice, setNotice] = useState("");
-  const stageRef = useRef<HTMLDivElement>(null);
-  const shareDialog = useRef<HTMLDialogElement>(null);
-  const savingRef = useRef(false);
-  const saved = workspace?.candidates.find(candidate => candidate.id === draft?.id);
-  const dirty = Boolean(draft && saved && JSON.stringify(draft) !== JSON.stringify(saved));
-  useEffect(() => {
-    if (draft || !workspace) return;
-    const selectedId = new URLSearchParams(window.location.search).get("candidate");
-    setDraft(workspace.candidates.find(candidate => candidate.id === selectedId) ?? workspace.candidates[0]);
-  }, [workspace, draft]);
-  useEffect(() => {
-    if (!workspace || !draft) return;
-    // The URL remembers selection; the server remains the source of saved candidate data.
-    const url = new URL(window.location.href);
-    url.searchParams.set("workspace", workspace.id);
-    url.searchParams.set("candidate", draft.id);
-    window.history.replaceState(window.history.state, "", url);
-  }, [workspace?.id, draft?.id]);
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (event: BeforeUnloadEvent): void => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
-  useEffect(() => {
-    if (!notice) return;
-    const timeout = window.setTimeout(() => setNotice(""), 4000);
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
-  useEffect(() => {
-    if (shareOpen) shareDialog.current?.showModal(); else shareDialog.current?.close();
-  }, [shareOpen]);
-  const save = useCallback(async (): Promise<boolean> => {
-    if (!workspace || !draft || busy || savingRef.current) return false;
-    if (!dirty) return true;
-    const original = draft;
-    const normalized = normalizeCandidate(original);
-    const next = workspace.candidates.map(candidate => candidate.id === original.id ? normalized : candidate);
-    savingRef.current = true;
+  function submit(): void {
     try {
-      const success = await saveCandidates(next);
-      if (success) {
-        // Do not overwrite a newer draft if another action updated it before the save began.
-        setDraft(current => JSON.stringify(current) === JSON.stringify(original) ? normalized : current);
-        setNotice("Changes saved");
+      let dataset: AnalysisDataset, settings: FigureSettings | undefined;
+      if (kind === 'json') {
+        if (new TextEncoder().encode(text).byteLength > 2 * 1024 * 1024) throw new Error('Import exceeds the 2 MB limit.');
+        const parsed = JSON.parse(text);
+        if (parsed?.dataset) { const input = analysisCreateSchema.parse({ dataset: parsed.dataset, settings: parsed.settings }); dataset = input.dataset; settings = input.settings; }
+        else dataset = parseDatasetJSON(text);
+      } else {
+        const provenance = importProvenance(assembly.trim(), sourceUrl.trim(), label.trim());
+        dataset = kind === 'scores' ? parseScoreCSV(text, provenance, filename || 'Imported molecular scores') : parseTrackCSV(text, provenance, filename || 'Imported signal tracks');
       }
-      return success;
-    } finally { savingRef.current = false; }
-  }, [workspace, draft, dirty, busy, saveCandidates]);
-  useEffect(() => {
-    const handler = (event: KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void save(); }
-      if (event.key === "Escape") { setCreateOpen(false); setNavOpen(false); setInspectorOpen(false); }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [save]);
-
-  function update(patch: Partial<Candidate>): void {
-    // Canvas picks are edits too; close the same in-flight save window as disabled form fields.
-    if (busy || savingRef.current) return;
-    setDraft(previous => previous ? { ...previous, ...patch } : previous);
+      onImport(dataset, settings); onClose();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Check the dataset format.'); }
   }
-  async function select(candidate: Candidate): Promise<void> {
-    if (busy || savingRef.current || candidate.id === draft?.id) return;
-    if (dirty && !await save()) return;
-    setDraft(candidate); setNavOpen(false); setResetKey(key => key + 1);
+  return <Modal title="Import analysis data" onClose={onClose} footer={<><button className="template-link" onClick={template}><ArrowDownToLine size={13}/>{kind === 'tracks' ? 'Download CSV headers' : 'Download real example'}</button><button className="button primary" onClick={submit} disabled={!text.trim()}>Open dataset <ArrowUpRight size={14}/></button></>}>
+    <div className="modal-body"><p>Bring molecular scores or aligned reference and alternate signals. Up to 5,000 rows · 2 MB.</p>
+      <div className="import-types" aria-label="Import format">{([['json','Analysis JSON'],['scores','Score CSV'],['tracks','Track CSV']] as const).map(([value,title]) => <button key={value} className={kind === value ? 'active' : ''} onClick={() => { setKind(value); setError(''); }}>{value === 'json' ? <FileJson size={14}/> : <FileSpreadsheet size={14}/>} {title}</button>)}</div>
+      <label className="upload-target"><Upload size={17}/>{filename || 'Choose a CSV or JSON file'}<input type="file" accept=".csv,.json,text/csv,application/json" onChange={event => { void readFile(event.target.files?.[0]); }}/></label>
+      <label className="field"><span>Or paste data</span><textarea spellCheck={false} aria-label="Paste analysis data" value={text} onChange={event => setText(event.target.value)} onPaste={event => {
+        const pasted = event.clipboardData.getData('text');
+        const element = event.currentTarget;
+        const next = text.slice(0, element.selectionStart) + pasted + text.slice(element.selectionEnd);
+        event.preventDefault();
+        if (new TextEncoder().encode(next).byteLength > 2 * 1024 * 1024) { setError('Paste exceeds the 2 MB limit.'); return; }
+        setText(next); setError('');
+      }} placeholder={kind === 'json' ? '{ "schemaVersion": 1, "kind": "scores", … }' : kind === 'scores' ? 'variant,biosample,modality,scorer,score\n…' : 'chromosome,position,reference,alternate,track\n…'}/></label>
+      {kind !== 'json' && <><div className="field-row"><label className="field"><span>Reference assembly · required</span><select value={assembly} onChange={event => setAssembly(event.target.value)}><option value="">Select assembly</option><option value="GRCh38">GRCh38 / hg38</option><option value="GRCh37">GRCh37 / hg19</option></select></label><label className="field"><span>Source label</span><input value={label} onChange={event => setLabel(event.target.value)} placeholder="Study, experiment or model" maxLength={200}/></label></div><label className="field"><span>Source URL · optional</span><input value={sourceUrl} onChange={event => setSourceUrl(event.target.value)} placeholder="https://…" type="url" maxLength={2048}/></label><p className="field-hint">{kind === 'tracks' ? 'Positions are 0-based. Reference and alternate columns contain numeric signal, not DNA letters. One row per chromosome, position and track.' : 'Variant positions are 1-based. Raw scores retain their supplied method and units. Blank scores are rejected.'}</p></>}
+      {error && <div className="import-error" role="alert">{error}</div>}
+    </div>
+  </Modal>;
+}
+function DataTable({ rows, limit = 100 }: { rows: ScoreRow[]; limit?: number }) {
+  return <div className="table-scroll"><table className="data-table"><thead><tr><th>Variant · 1-based</th><th>Gene</th><th>Biosample</th><th>Raw score</th><th>Quantile</th><th>Track</th><th>Source row</th></tr></thead><tbody>{rows.slice(0, limit).map((row, index) => <tr key={`${row.variant}:${row.sourceRowIndex ?? index}:${row.geneId || ''}`}><td>{row.variant}</td><td>{row.gene || row.geneId || '—'}</td><td>{row.biosample}</td><td title={String(row.score)}>{formatScore(row.score, 7)}</td><td title={String(row.quantile ?? '')}>{formatScore(row.quantile, 6)}</td><td title={row.track}>{row.track || row.biosample}</td><td>{row.sourceRowIndex ?? '—'}</td></tr>)}</tbody></table></div>;
+}
+function EvidenceDrawer({ dataset, settings, onClose }: { dataset: AnalysisDataset; settings: FigureSettings; onClose: () => void }) {
+  const provenance = dataset.provenance, rows = matchingRows(dataset, settings);
+  const isPublished = dataset.id === DEFAULT_DATASET.id && provenance.sourceUrl === DEFAULT_DATASET.provenance.sourceUrl;
+  return <Modal title="Source & method" onClose={onClose} drawer>
+    <div className="evidence-section"><h3>{provenance.sourceLabel}</h3><p>{provenance.context}</p>{provenance.sourceUrl && <a href={provenance.sourceUrl} target="_blank" rel="noreferrer">Open the original source <ArrowUpRight size={12}/></a>}</div>
+    <div className="evidence-section"><h3>Dataset</h3><dl><div><dt>Assembly</dt><dd>{provenance.assembly}</dd></div><div><dt>Model</dt><dd>{provenance.model}</dd></div><div><dt>Data type</dt><dd>{dataset.kind === 'scores' ? 'Variant-effect scores' : 'Reference / alternate signals'}</dd></div><div><dt>Records</dt><dd>{dataset.rows.length.toLocaleString('en-US')}</dd></div><div><dt>Recorded</dt><dd>{provenance.recordedAt ? new Date(provenance.recordedAt).toLocaleDateString('en-GB', { day:'numeric',month:'long',year:'numeric' }) : 'Not supplied'}</dd></div><div><dt>Source status</dt><dd>{provenance.mode === 'published-example' ? 'Published example' : 'User import'}</dd></div></dl></div>
+    <div className="evidence-section"><h3>Figure method</h3><p>{dataset.kind === 'scores' ? 'Scores are filtered to one modality, exact scorer, track, strand and unit. Rows are ranked by absolute magnitude. Values are not combined across incompatible assays.' : 'Supplied reference and alternate values share an axis within each chromosome and track. Lines interpolate between supplied positions.'}</p>{dataset.kind === 'scores' && <><dl><div><dt>Scorer</dt><dd>{settings.scorer}</dd></div><div><dt>Units</dt><dd>{unitLabel(rows, settings)}</dd></div><div><dt>Display limit</dt><dd>{settings.limit} rows or features</dd></div><div><dt>Matching rows</dt><dd>{rows.length}</dd></div></dl><p>Quantile scores describe relative molecular effects. They are not AVI scores, disease probabilities or treatment success rates.</p></>}</div>
+    {isPublished && <div className="evidence-section"><h3>Published example limits</h3><ul>{PUBLISHED_PROVENANCE.limitations.map(item => <li key={item}>{item}</li>)}</ul><p>Notebook execution timestamp is embedded source metadata, not an independently verified publication date.</p><div className="provenance-hash">Normalized source SHA-256<br/>{PUBLISHED_PROVENANCE.ui_fixture_sha256}</div></div>}
+    <div className="evidence-section"><h3>Reproducibility</h3><p>The analysis JSON contains the complete dataset, source metadata and figure settings. CSV preserves numeric values; it does not contain the full provenance record.</p><a href="https://www.alphagenomedocs.com/variant_scoring.html" target="_blank" rel="noreferrer">AlphaGenome scoring documentation <ArrowUpRight size={12}/></a></div>
+  </Modal>;
+}
+export default function App() {
+  const lab = useAnalysis();
+  const { dataset, settings, setSettings } = lab;
+  const [importKind, setImportKind] = useState<ImportKind | null>(null), [evidence, setEvidence] = useState(false), [controls, setControls] = useState(false), [exportOpen, setExportOpen] = useState(false), [shareUrl, setShareUrl] = useState(''), [message, setMessage] = useState(''), [selected, setSelected] = useState<ScoreRow | null>(null), [copied, setCopied] = useState(false);
+  const svg = useRef<SVGSVGElement>(null), exportContainer = useRef<HTMLDivElement>(null);
+  const rows = useMemo(() => rankedRows(dataset, settings), [dataset, settings]);
+  const allScores = dataset.kind === 'scores' ? dataset.rows : [];
+  const modalities = distinct(allScores.map(row => row.modality));
+  const modalityRows = allScores.filter(row => row.modality === settings.modality);
+  const scorers = distinct(modalityRows.map(row => row.scorer));
+  const scorerRows = modalityRows.filter(row => row.scorer === settings.scorer);
+  const groups = [...new Map(scorerRows.map(row => [comparisonKey(row), row])).entries()];
+  const groupRows = scorerRows.filter(row => comparisonKey(row) === settings.track);
+  const genes = distinct(groupRows.map(row => row.gene || row.geneId || '').filter(Boolean));
+  const variants = distinct(groupRows.map(row => row.variant));
+  const visibleCount = Math.min(settings.limit, rows.length);
+  const isTracks = dataset.kind === 'tracks';
+  const selectedTrackRows = dataset.kind === 'tracks' ? dataset.rows.filter(row => !settings.track || JSON.stringify([row.chromosome, row.track]) === settings.track) : [];
+  useEffect(() => { setSelected(null); }, [dataset, settings]);
+  useEffect(() => { if (!exportOpen) return; const handler = (event: MouseEvent): void => { if (!exportContainer.current?.contains(event.target as Node)) setExportOpen(false); }; document.addEventListener('mousedown', handler); return () => document.removeEventListener('mousedown', handler); }, [exportOpen]);
+  useEffect(() => { if (!message) return; const timer = setTimeout(() => setMessage(''), 5500); return () => clearTimeout(timer); }, [message]);
+  function updateMethod(modality: string, scorer?: string): void {
+    const first = allScores.find(row => row.modality === modality && (!scorer || row.scorer === scorer)); if (!first) return;
+    setSettings({ modality, scorer: first.scorer, track: comparisonKey(first), gene: '', variant: '' });
   }
-  async function create(scenario: Candidate["scenario"], duplicate = false): Promise<void> {
-    if (!workspace || !draft || busy || savingRef.current || workspace.candidates.length >= 20) return;
-    const original = normalizeCandidate(draft);
-    const candidate: Candidate = duplicate ? { ...original, id: crypto.randomUUID(), title: `${original.title.slice(0, 70)} · copy`, createdAt: new Date().toISOString() }
-      : { id: crypto.randomUUID(), title: scenario === "sickle-cell" ? "Fetal hemoglobin" : "DNM1 splice variant", question: scenario === "sickle-cell" ? "Can gene therapy reduce sickle-cell crises?" : "How does one DNA change alter RNA assembly?", scenario, intervention: "intervention", selectedIndex: 20, alternate: "A", notes: "", createdAt: new Date().toISOString() };
-    const normalized = normalizeCandidate(candidate);
-    const next = [...workspace.candidates.map(item => item.id === original.id ? original : item), normalized];
-    savingRef.current = true;
+  async function handleExport(kind: 'svg' | 'png' | 'csv' | 'json'): Promise<void> {
+    setExportOpen(false);
     try {
-      if (await saveCandidates(next)) { setDraft(normalized); setCreateOpen(false); setNavOpen(false); setNotice(duplicate ? "Alternative duplicated" : "Comparison created"); }
-    } finally { savingRef.current = false; }
+      if (kind === 'json') {
+        const input = analysisCreateSchema.parse({ dataset, settings });
+        downloadFile(JSON.stringify({ format: 'helix-analysis', formatVersion: 1, exportedAt: new Date().toISOString(), savedAnalysis: lab.record ? { id: lab.record.id, revision: lab.record.revision } : null, hasUnsavedChanges: lab.dirty, ...input, methods: { inferencePerformed: false, ranking: 'absolute magnitude within exact scorer/track/unit', missingValues: 'not filled with zero' } }, null, 2), 'helix-analysis.json', 'application/json');
+      } else if (kind === 'csv') downloadFile(dataset.kind === 'tracks' ? datasetToCSV({ ...dataset, rows: selectedTrackRows }) : csvForRows(rows), 'helix-selected-data.csv', 'text/csv;charset=utf-8');
+      else { if (!svg.current) throw new Error('Choose Score plot, Matrix or Tracks before exporting an image.'); await exportFigure(svg.current, kind, 'helix-figure', { title: settings.title, source: dataset.provenance.sourceLabel, sourceUrl: dataset.provenance.sourceUrl, assembly: dataset.provenance.assembly, status: dataset.provenance.mode === 'published-example' ? 'Published model output snapshot · no live inference performed' : 'Supplied data · no inference performed' }); }
+      setMessage(`${kind.toUpperCase()} exported`);
+    } catch (cause) { lab.setError(cause instanceof Error ? cause.message : 'Export failed.'); }
   }
-  async function remove(): Promise<void> {
-    if (!workspace || !draft || workspace.candidates.length < 2 || busy || savingRef.current) return;
-    if (!window.confirm(`Delete “${draft.title}”? This removes this saved comparison and its notes.`)) return;
-    const next = workspace.candidates.filter(item => item.id !== draft.id);
-    savingRef.current = true;
-    try {
-      if (await saveCandidates(next)) { setDraft(next[0]); setNotice("Comparison deleted"); }
-    } finally { savingRef.current = false; }
-  }
-  function exportWorkspace(): void {
-    if (!workspace) return;
-    const url = URL.createObjectURL(new Blob([workspaceToJSON(workspace)], { type: "application/json" }));
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `helix-workspace-${workspace.id.slice(0, 8)}.json`; anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setNotice("Saved comparison settings exported");
-  }
-  async function openShare(): Promise<void> { if (busy || savingRef.current || (dirty && !await save())) return; setShareOpen(true); }
-  async function copyLink(): Promise<void> {
-    if (!workspace) return;
-    const url = new URL(location.origin + location.pathname); url.searchParams.set("workspace", workspace.id);
-    if (draft) url.searchParams.set("candidate", draft.id);
-    try { await navigator.clipboard.writeText(url.href); setCopied(true); }
-    catch { setNotice("Select and copy the link below."); }
-  }
-  async function expand(): Promise<void> {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else if (stageRef.current?.requestFullscreen) await stageRef.current.requestFullscreen();
-      else setNotice("Fullscreen is unavailable in this browser.");
-    } catch { setNotice("Fullscreen is unavailable in this browser."); }
-  }
-
-  if (!workspace || !draft) return <main className="workspace-loading"><span className="helix-mark"><Dna size={28} /></span><h1>{error ? "Your workspace could not open" : "Opening your workspace"}</h1><p>{error || "Loading saved comparisons."}</p>{error && <button className="button primary" onClick={() => location.reload()}>Try again</button>}</main>;
-  const isBlood = draft.scenario === "sickle-cell";
-  const visibleCandidates = workspace.candidates.filter(candidate => `${candidate.title} ${candidate.question} ${kindLabel(candidate)}`.toLowerCase().includes(search.toLowerCase()));
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}${window.location.pathname}?workspace=${workspace.id}&candidate=${draft.id}` : "";
-
-  return <div className="workspace-shell">
-    <header className="app-header">
-      <button className="icon-button mobile-menu" aria-label="Open comparisons" onClick={() => setNavOpen(!navOpen)}><Menu size={20} /></button>
-      <a className="brand" href={shareUrl} aria-label="Helix workspace"><span className="helix-mark"><Dna size={24} strokeWidth={1.7} /></span>helix<span className="brand-divider" /></a>
-      <span className="workspace-name">Personal workspace</span>
-      <span className={`save-status ${dirty ? "pending" : ""}`} aria-live="polite">{busy ? <span className="save-spinner" /> : dirty ? <span className="unsaved-dot" /> : <Check size={14} />}{busy ? "Saving…" : dirty ? "Unsaved changes" : "Saved"}</span>
-      <div className="header-actions"><button className="button quiet" aria-label="Export" onClick={exportWorkspace} disabled={dirty || busy} title={dirty ? "Save your changes before exporting" : "Export saved comparison settings"}><ArrowDownToLine size={16} /><span>Export</span></button><button className="button" aria-label="Share" onClick={() => { void openShare(); }} disabled={busy}><Link2 size={16} /><span>Share</span></button></div>
-    </header>
-
-    <aside className={`workspace-sidebar ${navOpen ? "is-open" : ""}`} aria-label="Saved comparisons">
-      <div className="sidebar-heading"><span>Comparisons</span><button className="icon-button mobile-close" aria-label="Close comparisons" onClick={() => setNavOpen(false)}><X size={18} /></button></div>
-      <div className="new-comparison-wrap"><button className="button primary new-comparison" disabled={busy || workspace.candidates.length >= 20} aria-expanded={createOpen} onClick={() => setCreateOpen(!createOpen)}><Plus size={17} /> New comparison <ChevronDown size={14} /></button>
-        {createOpen && <div className="create-menu"><button onClick={() => { void create("sickle-cell"); }}><span className="case-icon blood-icon"><span /></span><span>Blood cell function<small>Gene therapy evidence</small></span></button><button onClick={() => { void create("dnm1"); }}><Dna size={19} /><span>Mutation effects<small>DNM1 published case</small></span></button></div>}
-      </div>
-      <label className="sidebar-search"><Search size={16} /><input aria-label="Search comparisons" placeholder="Find a comparison" value={search} onChange={event => setSearch(event.target.value)} /></label>
-      <div className="candidate-list">{visibleCandidates.map(candidate => <button key={candidate.id} className={`candidate-item ${candidate.id === draft.id ? "selected" : ""}`} disabled={busy} onClick={() => { void select(candidate); }} aria-current={candidate.id === draft.id ? "page" : undefined}>
-        {candidate.scenario === "sickle-cell" ? <span className="case-icon blood-icon"><span /></span> : <Dna size={18} />}<span><strong>{candidate.id === draft.id ? draft.title || "Untitled comparison" : candidate.title}{candidate.id === draft.id && dirty && <i aria-label="unsaved" />}</strong><small>{kindLabel(candidate)}</small></span><ChevronRight className="candidate-chevron" size={14} /></button>)}{!visibleCandidates.length && <p className="empty-search">No comparisons match this search.</p>}</div>
-      <button className={`review-link ${reviewOpen ? "active" : ""}`} aria-expanded={reviewOpen} onClick={() => { setReviewOpen(!reviewOpen); setNavOpen(false); }}><Layers2 size={17} /> Review alternatives <span>{workspace.candidates.length}</span></button>
-      <div className="sidebar-bottom"><div className="connection-state"><span /> Live predictions not connected</div><p>Saved questions and sourced evidence. No new prediction is computed.</p><a href="/api/openapi.json" target="_blank" rel="noreferrer">API reference <ArrowUpRight size={13} /></a></div>
-    </aside>
-
-    <main className="workspace-main">
-      <div className="comparison-heading"><div className="comparison-kicker"><span>{kindLabel(draft)}</span><span className="text-dot">·</span><span>{evidenceLabel(draft)}</span></div>
-        <div className="title-row"><input className="comparison-title" aria-label="Comparison title" maxLength={80} value={draft.title} disabled={busy} onChange={event => update({ title: event.target.value })} /><button className="icon-button inspector-toggle" aria-label="Open evidence and setup" onClick={() => setInspectorOpen(!inspectorOpen)}><Settings2 size={21} /></button></div>
-        <textarea className="question-input" aria-label="Research question" rows={2} maxLength={500} value={draft.question} disabled={busy} onChange={event => update({ question: event.target.value })} />
-        <div className="comparison-toolbar"><div className="segmented-control"><button className={!compare ? "active" : ""} aria-pressed={!compare} onClick={() => setCompare(false)}><FlaskConical size={15} /> Explore</button><button className={compare ? "active" : ""} aria-pressed={compare} onClick={() => setCompare(true)}><SplitSquareHorizontal size={16} /> Compare</button></div><div className="comparison-tools"><button className="button quiet duplicate-button" aria-label="Duplicate" disabled={busy || workspace.candidates.length >= 20} onClick={() => { void create(draft.scenario, true); }}><Copy size={15} /><span>Duplicate</span></button><button className="button save-button" disabled={!dirty || busy} onClick={() => { void save(); }}><Check size={16} /><span>Save changes</span></button></div></div>
-      </div>
-
-      <div className="visual-workspace" ref={stageRef}>
-        <div className="canvas-tools"><button className="icon-button" aria-label="Recenter camera" title="Recenter camera" onClick={() => setResetKey(key => key + 1)}><RotateCcw size={16} /></button><button className="icon-button" aria-label="Expand visual workspace" title="Expand" onClick={() => { void expand(); }}><Expand size={16} /></button></div>
-        {isBlood ? <>
-          <div className={`blood-comparison ${compare ? "split" : "single"}`}>
-            {(compare ? ["baseline", draft.intervention] as const : [draft.intervention]).map((mode, index) => <section className="blood-pane" key={`${index}-${mode}`} aria-label={compare && index === 0 ? "Sickling illustration" : mode === "baseline" ? "Sickling illustration" : "Fetal hemoglobin illustration"}>
-              <OutcomeScene mode={mode} playing={playing} resetKey={resetKey} />
-              <div className="blood-pane-heading"><span className={`mode-dot ${mode}`} /><div><h2>{mode === "baseline" ? "Sickling" : "With fetal hemoglobin"}</h2><p>{mode === "baseline" ? "Distorted cells can obstruct flow" : "Illustrating reduced sickling"}</p></div></div>
-              {mode === "intervention" && <span className="mechanism-label">HbF ↑</span>}
-            </section>)}
-            <div className="scene-disclosure">Illustrative 3D · not a calibrated simulation</div>
+  async function save(): Promise<void> { const result = await lab.save(); if (result) setMessage('Analysis saved'); }
+  async function share(): Promise<void> { const record = lab.dirty ? await lab.save() : lab.record; if (!record) return; const url = new URL(location.href); url.search = ''; url.searchParams.set('analysis', record.id); setShareUrl(url.toString()); setCopied(false); }
+  async function copyShare(): Promise<void> { try { await navigator.clipboard.writeText(shareUrl); setCopied(true); } catch { setMessage('Select and copy the link above.'); } }
+  const sourceDate = dataset.provenance.recordedAt ? new Date(dataset.provenance.recordedAt).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'Date not supplied';
+  return <div className="lab-app">
+    <header className="appbar"><div className="wordmark"><span className="wordmark-symbol" aria-hidden="true"><i/><i/><i/></span>helix</div><span className="app-context">Analysis workspace</span><div className="appbar-right"><span className="connection-label"><i/>{dataset.provenance.mode === 'published-example' ? 'Published model output' : 'Imported data'}</span><span className={`save-state ${lab.dirty ? 'dirty' : ''}`}>{lab.busy ? 'Saving…' : lab.dirty ? 'Local draft' : 'Saved'}</span><button className="button dark" aria-label="Share analysis" onClick={() => { void share(); }} disabled={lab.busy || !lab.ready}><Link2 size={14}/><span className="save-word">Share</span></button><button className="button primary" aria-label="Save analysis" onClick={() => { void save(); }} disabled={lab.busy || !lab.ready || Boolean(lab.conflict)}>{lab.busy ? <span className="load-spinner"/> : <Save size={14}/>}<span className="save-word">Save analysis</span></button></div></header>
+    {(lab.error || message) && <div className={`notice ${lab.error ? 'error' : ''}`} role={lab.error ? 'alert' : 'status'}><Info size={15}/><span>{lab.error || message}</span>{lab.conflict && <><button onClick={() => { void lab.save(true).then(record => { if (record) setMessage('Saved as a new analysis'); }); }}>Save a copy</button><button onClick={lab.loadShared}>Load shared version</button></>}<button aria-label="Dismiss message" onClick={() => { lab.clearError(); setMessage(''); }}><X size={14}/></button></div>}
+    <div className="workspace-shell">
+      {controls && <button className="controls-overlay" aria-label="Close controls overlay" onClick={() => setControls(false)}/>}
+      <aside className={`controls-rail ${controls ? 'open' : ''}`} aria-label="Figure controls">
+        <div className="rail-top"><button className="icon-button rail-close" aria-label="Close figure controls panel" onClick={() => setControls(false)}><X size={17}/></button><span className="eyebrow">Dataset</span><div className="dataset-name"><Database size={17}/><div><strong>{dataset.title}</strong><small>{dataset.rows.length.toLocaleString('en-US')} records · {dataset.provenance.assembly}</small></div></div><span className="dataset-pill"><i/>{dataset.provenance.mode === 'published-example' ? `Published example · ${sourceDate}` : 'Imported · source supplied'}</span></div>
+        <div className="rail-section"><div className="rail-section-title"><h2>Analysis scope</h2><SlidersHorizontal size={13} color="#8b9ab0"/></div>
+          {!isTracks ? <>
+            <label className="field"><span>Modality</span><select aria-label="Modality" value={settings.modality} onChange={event => updateMethod(event.target.value)}>{modalities.map(modality => <option key={modality} value={modality}>{modalityLabel(modality)}</option>)}</select></label>
+            <label className="field"><span>Scoring method</span><select aria-label="Scoring method" value={settings.scorer} title={settings.scorer} onChange={event => updateMethod(settings.modality, event.target.value)}>{scorers.map(scorer => <option key={scorer} value={scorer}>{scorerLabel(scorer)}</option>)}</select></label>
+            <label className="field"><span>Track / assay</span><select aria-label="Track or assay" value={settings.track} onChange={event => setSettings({ track: event.target.value, gene: '', variant: '' })}>{groups.map(([key, row]) => <option key={key} value={key}>{trackLabel(row)}</option>)}</select></label>
+            <label className="field"><span>Gene</span><select aria-label="Gene" value={settings.gene} onChange={event => setSettings({ gene: event.target.value })} disabled={!genes.length}><option value="">{genes.length ? `All ${genes.length} genes` : 'No gene-specific scores'}</option>{genes.map(gene => <option key={gene}>{gene}</option>)}</select></label>
+            <label className="field"><span>Variant</span><select aria-label="Variant" value={settings.variant} onChange={event => setSettings({ variant: event.target.value })}><option value="">All {variants.length} variants</option>{variants.map(variant => <option key={variant}>{variant}</option>)}</select></label>
+          </> : <><label className="field"><span>Chromosome / track</span><select value={settings.track} aria-label="Chromosome and track" onChange={event => setSettings({ track: event.target.value })}><option value="">All tracks · separate axes</option>{trackGroups(dataset.rows).map(group => <option key={group.key} value={group.key}>{group.label}</option>)}</select></label><p className="field-hint">Reference and alternate signals share each track's y-axis. Chromosomes remain separate.</p></>}
+        </div>
+        <div className="rail-section"><div className="rail-section-title"><h2>Figure</h2><Settings2 size={13} color="#8b9ab0"/></div>
+          {!isTracks && <label className="field"><span>Metric</span><select value={settings.metric} aria-label="Metric" onChange={event => setSettings({ metric: event.target.value as FigureSettings['metric'] })}><option value="score">Raw effect score</option><option value="quantile" disabled={!groupRows.some(row => row.quantile !== undefined)}>Quantile score</option></select></label>}
+          <label className="field"><span>{isTracks && settings.chart !== 'table' ? 'Maximum tracks' : settings.chart === 'heatmap' ? 'Maximum features' : 'Maximum rows'}</span><select value={settings.limit} aria-label="Maximum displayed rows" onChange={event => setSettings({ limit: Number(event.target.value) })}>{[4, 8, 12, 24, 50, 100].map(value => <option value={value} key={value}>{value}</option>)}</select></label>
+          <p className="field-hint">{isTracks ? 'Numeric signal at supplied positions.' : 'Ranked by absolute magnitude. One method and unit per figure.'}</p>
+        </div>
+        <div className="rail-footer"><button className="button" onClick={() => setImportKind('json')} disabled={lab.busy || !lab.ready}><Plus size={14}/>Import data</button><button className="button subtle" disabled={lab.busy || !lab.ready} onClick={() => { lab.openDataset(DEFAULT_DATASET); setControls(false); }}>Open published example</button><a className="help-link" href="https://www.alphagenomedocs.com/colabs/batch_variant_scoring.html" target="_blank" rel="noreferrer">AlphaGenome documentation <ArrowUpRight size={12}/></a></div>
+      </aside>
+      <main className="work-area"><div className="work-toolbar"><button className="icon-button mobile-control-toggle" aria-label={controls ? 'Close figure controls' : 'Open figure controls'} onClick={() => setControls(!controls)}>{controls ? <PanelLeftClose size={17}/> : <SlidersHorizontal size={17}/>}</button><nav className="figure-tabs" aria-label="Figure type">{CHARTS.map(chart => <button data-chart={chart.id} key={chart.id} className={settings.chart === chart.id ? 'active' : ''} aria-pressed={settings.chart === chart.id} onClick={() => { if (isTracks && chart.id !== 'tracks' && chart.id !== 'table') { setMessage('This dataset contains signal tracks. Import variant scores for Score plot or Matrix.'); return; } setSettings({ chart: chart.id }); }}>{<chart.icon size={14}/>} {chart.label}</button>)}</nav><div className="toolbar-actions"><button className="button" onClick={() => setEvidence(true)}><Info size={13}/><span>Source</span></button><div className="export-menu" ref={exportContainer}><button className="button" aria-expanded={exportOpen} onClick={() => setExportOpen(!exportOpen)}><ArrowDownToLine size={13}/>Export <ChevronDown size={11}/></button>{exportOpen && <div className="export-menu-items">{([['svg','Vector figure','SVG'],['png','High-resolution figure','PNG'],['csv','Selected data','CSV'],['json','Complete analysis','JSON']] as const).map(([value, label, extension]) => <button key={value} onClick={() => { void handleExport(value); }}>{label}<small>{extension}</small></button>)}</div>}</div></div></div>
+        <div className="canvas-well"><section className="figure-sheet" aria-label="Analysis figure"><div className="sheet-heading"><div className="sheet-title-wrap"><p className="sheet-kicker"><i/>{isTracks ? 'Reference / alternate comparison' : settings.modality.replaceAll('_',' ')} · {isTracks ? 'Genomic signals' : groupRows[0]?.biosample || 'Selected data'}</p><input className="figure-title" aria-label="Figure title" maxLength={160} value={settings.title} onChange={event => setSettings({ title: event.target.value })}/><p className="figure-subtitle">{isTracks ? `${selectedTrackRows.length} supplied positions · ${dataset.provenance.assembly}` : `${settings.chart === 'heatmap' ? 'Variant × feature matrix' : scorerLabel(settings.scorer)} · ${groupRows[0]?.assay || groupRows[0]?.track || 'Supplied scores'} · ${dataset.provenance.assembly}`}</p></div><span className="sheet-figure-label">FIG. 01</span></div>
+          <div className="plot-host">{settings.chart === 'tracks' && !isTracks ? <div className="empty-state track-import-empty"><ChartNoAxesCombined size={28}/><h3>Bring the full genomic signal</h3><p>This example contains summary scores. Import reference and alternate signal tracks to compare the curves at each genomic position.</p><button className="button primary" onClick={() => setImportKind('tracks')}><Upload size={14}/>Import signal tracks</button></div>
+            : settings.chart === 'table' ? isTracks ? <div className="chart-table"><div className="table-scroll"><table className="data-table"><thead><tr><th>Chromosome</th><th>Position · 0-based</th><th>Reference signal</th><th>Alternate signal</th><th>Track</th></tr></thead><tbody>{selectedTrackRows.slice(0, settings.limit).map(row => <tr key={`${row.chromosome}:${row.position}:${row.track}`}><td>{row.chromosome}</td><td>{row.position}</td><td>{row.reference}</td><td>{row.alternate}</td><td>{row.track}</td></tr>)}</tbody></table></div></div> : <div className="chart-table"><DataTable rows={rows} limit={settings.limit}/></div>
+              : <AnalysisFigure dataset={dataset} settings={settings} svgRef={svg} onSelect={setSelected}/>}
           </div>
-          <div className="viewport-playbar"><button className="play-button" aria-pressed={playing} onClick={() => setPlaying(!playing)}>{playing ? <Pause size={16} /> : <Play size={16} />}<span>{playing ? "Pause motion" : "Play motion"}</span></button><span className="orbit-hint">Drag to orbit <span>·</span> Scroll to zoom</span><span className="visual-only">Mechanism view</span></div>
-        </> : <MutationViewport key={draft.id} workspaceId={workspace.id} candidate={draft} compare={compare} resetKey={resetKey} onSelect={index => update({ selectedIndex: index })} />}
-      </div>
-
-      <section className="outcome-summary" aria-label="What the evidence tells us"><span className="outcome-icon">{isBlood ? <FlaskConical size={20} /> : <Dna size={22} />}</span><div><h2>{isBlood ? "A treatment outcome, with the evidence attached." : variantState(draft) === "published" ? "A single edit. A different RNA transcript." : variantState(draft) === "unchanged" ? "No change to the reference sequence." : "A new question, waiting for evidence."}</h2><p>{isBlood ? "The two views illustrate a mechanism. They are not trial arms or a prediction of treatment response." : variantState(draft) === "published" ? "The published variant adds 39 RNA bases. Other edits remain unscored." : variantState(draft) === "unchanged" ? "Choose a different alternate to record a variant." : "Save this alternative and your notes. No outcome is inferred from the animation."}</p></div><button className="text-button" onClick={() => { setTab("evidence"); setInspectorOpen(true); }}>Evidence <ArrowUpRight size={16} /></button></section>
-
-      {reviewOpen && <section className="alternatives-panel"><div className="panel-heading"><div><h2>Review alternatives</h2><p>Saved setups and their available evidence.</p></div><button className="icon-button" aria-label="Close alternatives review" onClick={() => setReviewOpen(false)}><X size={19} /></button></div><div className="table-scroll"><table><thead><tr><th>Comparison</th><th>Setup</th><th>Evidence</th><th>Notes</th><th /></tr></thead><tbody>{workspace.candidates.map(candidate => <tr key={candidate.id} className={candidate.id === draft.id ? "current-row" : ""}><td><strong>{candidate.title}</strong><span>{candidate.question}</span></td><td>{candidate.scenario === "sickle-cell" ? candidate.intervention === "baseline" ? "Sickling illustration" : "Fetal hemoglobin illustration" : `chr9:${STUDY.locus.start + candidate.selectedIndex} ${STUDY.referenceSequence[candidate.selectedIndex]} → ${candidate.alternate}`}</td><td><span className="table-evidence">{evidenceLabel(candidate)}</span></td><td>{candidate.notes ? `${candidate.notes.slice(0, 70)}${candidate.notes.length > 70 ? "…" : ""}` : "—"}</td><td><button className="icon-button" disabled={busy} aria-label={`Open ${candidate.title}`} onClick={() => { void select(candidate); }}><ArrowUpRight size={17} /></button></td></tr>)}</tbody></table></div></section>}
-      <footer className="workspace-footer"><span>Questions are saved. Outcomes require evidence.</span><span>⌘ / Ctrl + Enter to save</span></footer>
-    </main>
-
-    <aside className={`workspace-inspector ${inspectorOpen ? "is-open" : ""}`} aria-label="Comparison setup and evidence"><div className="inspector-header"><h2>Comparison setup</h2><button className="icon-button mobile-close" aria-label="Close evidence and setup" onClick={() => setInspectorOpen(false)}><X size={18} /></button><Settings2 className="desktop-setting" size={17} /></div>
-      <div className="setup-content"><label className="field-label" htmlFor="comparison-intervention">{isBlood ? "Illustrated mechanism" : "Alternate base"}</label>
-        {isBlood ? <><div className="select-wrap"><select id="comparison-intervention" disabled={busy} value={draft.intervention} onChange={event => update({ intervention: event.target.value as Candidate["intervention"] })}><option value="intervention">Increased fetal hemoglobin</option><option value="baseline">Sickling baseline</option></select><ChevronDown size={15} /></div><p className="setup-caption">Casgevy · edited blood stem cells</p></> : <><div className="base-select" id="comparison-intervention" role="group" aria-label="Alternate base">{BASES.map(base => <button key={base} aria-label={`Set alternate base ${base}`} aria-pressed={draft.alternate === base} disabled={busy} className={draft.alternate === base ? "selected" : ""} onClick={() => update({ alternate: base })}>{base}</button>)}</div><div className="sequence-label"><span>Verified reference · GRCh38</span><span>41 bases</span></div><div className="reference-strip">{STUDY.referenceSequence.split("").map((base, index) => <button key={index} aria-label={`Select position ${STUDY.locus.start + index}, ${base}`} aria-pressed={draft.selectedIndex === index} disabled={busy} className={draft.selectedIndex === index ? "selected" : ""} onClick={() => update({ selectedIndex: index })}>{base}</button>)}</div><p className="setup-caption">chr9:{STUDY.locus.start + draft.selectedIndex} · {STUDY.referenceSequence[draft.selectedIndex]} → {draft.alternate}</p>{variantState(draft) !== "published" && <button className="text-button restore-edit" disabled={busy} onClick={() => update({ selectedIndex: 20, alternate: "A" })}>Load published variant <RotateCcw size={13} /></button>}</>}
-      </div>
-      <div className="inspector-tabs" role="tablist" aria-label="Comparison detail"><button role="tab" aria-selected={tab === "evidence"} onClick={() => setTab("evidence")}>Evidence</button><button role="tab" aria-selected={tab === "notes"} onClick={() => setTab("notes")}>Notes{draft.notes && <span className="notes-dot" />}</button></div>
-      {tab === "evidence" ? <EvidencePanel candidate={draft} /> : <div className="notes-content"><label htmlFor="candidate-notes">What would you investigate next?</label><textarea id="candidate-notes" maxLength={3000} value={draft.notes} disabled={busy} onChange={event => update({ notes: event.target.value })} placeholder="Record a hypothesis, a limitation, or the next experiment…" /><div className="notes-footer"><span>{draft.notes.length} / 3000</span><button className="button" disabled={!dirty || busy} onClick={() => { void save(); }}>Save notes</button></div><p>Notes are included in the workspace export.</p></div>}
-      <div className="inspector-bottom"><button className="text-button delete-button" disabled={busy || workspace.candidates.length <= 1} onClick={() => { void remove(); }}><Trash2 size={14} /> Delete comparison</button></div>
-    </aside>
-    {(navOpen || inspectorOpen) && <button className="mobile-scrim" aria-label="Close side panel" onClick={() => { setNavOpen(false); setInspectorOpen(false); }} />}
-    {error && <div className="error-toast" role="alert"><span>{error}</span><button className="icon-button" aria-label="Dismiss error" onClick={clearError}><X size={17} /></button></div>}
-    {notice && <div className="notice-toast" role="status"><Check size={16} />{notice}</div>}
-    <dialog className="share-dialog" ref={shareDialog} onCancel={() => setShareOpen(false)} onClose={() => { setShareOpen(false); setCopied(false); }}><div className="dialog-heading"><h2>Share this workspace</h2><button className="icon-button" aria-label="Close sharing" onClick={() => setShareOpen(false)}><X size={20} /></button></div><p>Anyone with this link can view and edit all comparisons and notes. Only share material you are comfortable making accessible this way.</p><label htmlFor="workspace-share-link">Workspace link</label><input id="workspace-share-link" value={shareUrl} readOnly onFocus={event => event.target.select()} /><button className="button primary" onClick={() => { void copyLink(); }}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? "Copied" : "Copy link"}</button></dialog>
+          {settings.chart !== 'table' && (settings.chart !== 'tracks' || isTracks) && <div className="plot-legend">{isTracks ? <><span><i className="legend-line"/>Reference signal</span><span><i className="legend-line alt"/>Alternate signal</span></> : <><span><i className="legend-line"/>Negative score</span><span><i className="legend-line alt"/>Positive score</span>{settings.chart === 'heatmap' && <span><i className="legend-empty"/>No supplied value</span>}</>}<span>{isTracks ? 'Lines interpolate supplied positions' : 'Molecular model output'}</span></div>}
+          {selected && <div className="selection-strip"><strong>{selected.variant}</strong><span>{selected.gene || selected.biosample}</span><span>Raw {selected.score}</span>{selected.quantile !== undefined && <span>Quantile {formatScore(selected.quantile, 7)}</span>}<button className="icon-button" aria-label="Clear selected result" onClick={() => setSelected(null)}><X size={12}/></button></div>}
+          <div className="sheet-caption"><p><strong>{dataset.provenance.sourceLabel}</strong><br/>{dataset.provenance.mode === 'published-example' ? `Published notebook snapshot · ${sourceDate} · no live inference performed.` : 'Supplied data · source metadata retained · no inference performed.'}</p><button className="source-action" onClick={() => setEvidence(true)}>Source & method <ArrowUpRight size={12}/></button></div>
+        </section>
+        <div className="figure-meta"><span><GitBranch size={12}/>{isTracks ? `${trackGroups(selectedTrackRows).length} independent chromosome / track groups` : settings.chart === 'heatmap' ? `${rows.length} matching source rows · missing values left empty` : `${visibleCount} of ${rows.length} matching rows · sorted by absolute magnitude`}</span><span className="mono">{isTracks ? 'COORDINATES: 0-BASED' : 'SCORES ≠ PROBABILITIES'}</span></div>
+        {!isTracks && settings.chart !== 'table' && rows.length > 0 && <section className="data-preview" aria-label="Selected source data"><div className="data-preview-header"><strong>Underlying data <span style={{ color:'#a0acbd',marginLeft:7 }}>{rows.length} rows</span></strong><button onClick={() => setSettings({ chart:'table' })}>Open table <ArrowUpRight size={10}/></button></div><DataTable rows={rows} limit={4}/></section>}
+      </div></main>
+    </div>
+    {importKind && <ImportDialog initialKind={importKind} onClose={() => setImportKind(null)} onImport={(value, importedSettings) => { lab.openDataset(value, importedSettings); setControls(false); setMessage(`${value.rows.length} records imported`); }}/>}
+    {evidence && <EvidenceDrawer dataset={dataset} settings={settings} onClose={() => setEvidence(false)}/>}
+    {shareUrl && <Modal title="Share analysis" onClose={() => setShareUrl('')} footer={<><span className="sharing-note">Source data and figure settings included.</span><button className="button primary" onClick={() => { void copyShare(); }}>{copied ? <Check size={14}/> : <Copy size={14}/>} {copied ? 'Copied' : 'Copy link'}</button></>}><div className="modal-body"><p>Anyone with this link can view and edit this analysis. Share only data you intend to make accessible.</p><div className="share-url">{shareUrl}</div></div></Modal>}
   </div>;
 }

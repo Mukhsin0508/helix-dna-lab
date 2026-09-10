@@ -1,10 +1,8 @@
 # Helix DNA Lab
 
-A workspace for comparing biological mechanisms, saving alternative hypotheses and reviewing published evidence. Built with React, TypeScript, Three.js, Fastify, and SQLite.
+An analytical workspace for genetic variant results. Import data, select an assay and scoring method, build a scientific figure, and save the inputs and figure settings together. React, TypeScript and SVG in the browser; Fastify/SQLite locally and TanStack Start/D1 when hosted.
 
-**[Open the live lab](https://helix-dna-lab.higgsfield.app/)** · [Higgsfield community](https://higgsfield.ai/supercomputer/apps/00961b5d-05b8-430c-aef1-825c7c4368bf/view)
-
-The hosted version uses TanStack Start and D1. It includes a published experimental replay; live AlphaGenome inference remains unconnected.
+[Public site](https://helix-dna-lab.higgsfield.app/) · [Research and data sources](docs/ANALYTICAL_LAB.md) · [Worklist](WORKLIST.md)
 
 ## Run locally
 
@@ -15,7 +13,7 @@ npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:4190**. The API runs on port 4191. Sessions persist in `.data/sessions.sqlite`, which is excluded from Git. No API keys are needed for the included replay.
+Open **http://127.0.0.1:4190**. The API runs on port 4191. Sessions persist in `.data/sessions.sqlite`, which is excluded from Git. No API key is needed to explore the included published data or plot an imported result.
 
 ```bash
 npm test
@@ -25,41 +23,34 @@ npm start
 
 After building, `npm start` serves the compiled frontend and API together at **http://127.0.0.1:4191**. The local service intentionally binds to loopback.
 
-## What works
+## Analytical workflow
 
-- Compare an illustrative sickle-cell mechanism with the mechanism described for Casgevy. Review the historical FDA endpoint and cohort, without treating it as a simulated clinical result.
-- Save, duplicate, edit and compare alternatives with notes and revision-protected persistence; export their actual saved state.
-- Inspect an original Blender cell built through Higgsfield 3D Jutsu, DNA, and schematic RNA. Orbit, zoom, and pause the scene.
-- Select any of 41 verified reference bases and change its alternate letter.
-- Compare reference and edited DNA illustrations.
-- Replay the published DNM1 G→A splicing example, with pause, resume, and scrubbing.
-- Inspect source evidence without leaving the scene.
-- Restore the selected comparison after reload and export source provenance. Replay sessions are isolated between browser tabs; each tab restores its last confirmed pause position.
+- Start from 524 real score rows extracted from Google's published AlphaGenome batch notebook, or import a CSV/JSON result.
+- Filter the variant, modality, exact scorer, track and gene. Compare only compatible scoring methods and units.
+- Generate signed bars, a comparison heatmap, a result table or aligned reference/alternate signal tracks from an imported track dataset.
+- Export the figure as SVG/PNG, the data as CSV, and the complete analysis recipe as JSON.
+- Save the dataset and settings in SQLite or D1. Reload or share the saved analysis with optimistic revision checks to prevent overwriting another edit.
 
-## Scientific scope
+The bundled data is a **historical published model-output example** with an upstream notebook execution timestamp of July 21, 2025. It includes four variants and T-cell tracks. Its model version was not recorded. It is not a fresh Atlas query, AVI data, the user's requested DNM1 variant, or genomic track arrays. See [source artifacts and provenance](data/atlas/README.md).
 
-The starting case is **GRCh38/hg38 chr9:128225994 G>A**, a DNM1 intronic variant discussed in the AlphaGenome Atlas report. UCSC and Ensembl independently match the 41-base excerpt and its central G. The publication reports an alternative splice acceptor, retaining 39 RNA bases and adding 13 amino acids, supported by minigene experiments.
+## Data and interpretation
 
-This release contains a **curated replay**, not a live AlphaGenome model connection. Molecular geometry, movement, playback timing, and the RNA loop are illustrations. They are not molecular dynamics, measured motion, folding predictions, or a complete cellular simulation. The short DNA excerpt does not contain the entire illustrated RNA extension. The loop conveys an added segment, not its predicted physical conformation.
+Scores are molecular predictions in scorer-specific units. Signed empirical quantiles are not disease probabilities or AVI PHRED. Missing heatmap cells mean no supplied result; they are not zero. Importing or filtering data does not execute a biological model.
 
-Other edits remain **unscored**. No disease probabilities, vaccine efficacy estimates, or creature phenotypes are inferred. The new blood-cell animation is also illustrative: its geometry, speeds and proportions are not calibrated physiological predictions. The supplied Higgsfield concept artwork remains a creative asset in the repository.
+SNV identifiers use one-based positions, for example `chr9:128226027:G>A`. Imported track positions are zero-based; reference/alternate fields are numeric signals. An explicit genome assembly is required. Input validation checks syntax and known GRCh38 bounds, not whether a reference allele matches the genome.
 
-The Casgevy clinical observation and DNM1 molecular example are independent cases. Changing a candidate's question, notes or illustration never changes the source study's result. See the [outcome workspace contract](docs/OUTCOME_WORKSPACE.md) for the distinction between measured observations, predictions and illustrations.
+Higgsfield-generated imagery is not part of the analytical interface. Earlier illustrative cell/replay components and their session APIs remain in the repository for compatibility; the active product is the figure workspace.
 
-See [scientific evidence](docs/scientific-evidence.md) for reference coordinates, retrieval URLs, and publication details. Underlying research is credited to Google DeepMind and the study's collaborators; this project is the interactive visualization layer.
+## Persistence and API
 
-## API and future integrations
+`POST /api/analyses` stores `{dataset, settings}`. `GET /api/analyses/:id` retrieves it. `PATCH /api/analyses/:id` requires `{revision, dataset, settings}` and returns 409 with the latest record on conflict. Schemas and endpoint documentation are exposed at `/api/openapi.json`.
 
-[API documentation](docs/api.md) and `/api/openapi.json` describe session and workspace endpoints. Workspace updates require optimistic revisions; conflicts preserve the newer server record and leave unsaved client edits available for recovery.
+Imports and drafts stay in the current browser until Save/share is used. Anyone with a saved analysis link can view and edit it. These are capability links, not authenticated accounts: use public or non-sensitive research results. Private genomic datasets need account ownership and access control before upload. Each input is capped at 5000 rows and 2 MiB.
 
-The next integration is an AllMCP provider exposing this API to ChatGPT, then Claude. The website and assistant will work against the same authorized session. This avoids building another chat interface. Provider registration, remote MCP transport, authentication, and live inference are **not implemented yet**.
+The frontend, local API and hosted adapter share the same dataset and figure schemas. See [hosting](docs/hosting.md) for deployment status and synchronization.
 
-The Higgsfield hosting adapter is in `deploy/higgsfield`: TanStack Start server routes run against D1, while the interactive scene renders on the visitor's GPU. The local Fastify adapter continues to use SQLite. See [hosting and verification](docs/hosting.md) for deployment status and the sync procedure.
+## Still to build
 
-The current release shares workspaces through unguessable collaboration links. Anyone with a link can read or edit its comparisons and notes; this is collaboration by possession of the link, not account authentication. It only accepts edits to the included public reference sequence. Private DNA uploads, model credentials, and live inference are not supported by the public API. Account ownership and authentication are required before adding private genomic data or paid model execution.
+Live Atlas lookup and AlphaGenome inference are not connected. The official static AVI archive returned HTTP 500 during verification; no requested DNM1 score was retrieved. Rich Atlas API access and self-hosted predictions require authorized access. No clinical efficacy, disease-risk or whole-organism phenotype probabilities are calculated.
 
-For a company product, confirm the applicable AlphaGenome license and commercial inference route before adding live model calls. Never ship model or Higgsfield credentials in the browser.
-
-## Project plan
-
-[WORKLIST.md](WORKLIST.md) contains the full agreed scope and remaining integration work. The repository is private while the first version is reviewed.
+Next stages are actual model/Atlas jobs, evaluation against compatible experimental measurements, and AllMCP tools for the same saved analyses. No separate in-app chat is planned. The broad DNA Engineering Lab goal is ongoing; this release provides its numerical analysis and figure-generation core.

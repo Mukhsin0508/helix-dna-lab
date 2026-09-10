@@ -7,7 +7,8 @@
     "dev": "concurrently -k -n api,web \"tsx watch server/index.ts\" \"vite --host 127.0.0.1 --port 4190\"",
     "build": "tsc --noEmit && vite build",
     "start": "tsx server/index.ts",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "test:browser": "node tests/browser-analyses.mjs"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
