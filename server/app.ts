@@ -219,12 +219,20 @@ export async function createApp(dbPath: string): Promise<FastifyInstance> {
       if (body.revision !== undefined && body.revision !== session.revision)
         return conflict(reply, session);
       const experiment = findExperiment(session.experimentId)!;
+      const isUnchanged =
+        session.alternate === experiment.referenceSequence[session.selectedIndex];
       const isCuratedVariant =
+        !isUnchanged &&
         session.selectedIndex === experiment.defaultIndex &&
         session.alternate === experiment.alternate;
       const updated = store.update(session, {
-        status: isCuratedVariant ? "replayed" : "unscored",
-        progress: isCuratedVariant ? 1 : 0,
+        status: isUnchanged
+          ? "unchanged"
+          : isCuratedVariant
+            ? "replayed"
+            : "unscored",
+        progress: 0,
+        ...(isCuratedVariant ? { view: "rna" as const, compare: true } : {}),
       });
       return updated
         ? { session: updated }
@@ -268,7 +276,9 @@ export async function createApp(dbPath: string): Promise<FastifyInstance> {
         session,
         experiment,
         scientificProvenance: {
-          mode: "curated educational replay",
+          mode: session.status === "unchanged"
+            ? "unchanged reference control"
+            : "curated educational replay",
           liveModelUsed: false,
           sequenceKind: experiment.sequenceKind,
           sequenceNotice:
@@ -278,9 +288,11 @@ export async function createApp(dbPath: string): Promise<FastifyInstance> {
           result:
             session.status === "replayed"
               ? "The selected edit matches this curated educational example. Its mechanism is replayed from cited evidence; no live prediction or numeric score was generated."
-              : session.status === "unscored"
-                ? "This edit has no model result. No molecular or organism-level effect has been inferred."
-                : "This session has not run its current edit.",
+              : session.status === "unchanged"
+                ? "The selected alternate is identical to the reference base. The DNA sequence is unchanged: this is a reference control, not a mutation. No model was called and no molecular or organism-level effect was inferred."
+                : session.status === "unscored"
+                  ? "This edit has no model result. No molecular or organism-level effect has been inferred."
+                  : "This session has not run its current edit.",
           evidence: experiment.evidence,
           limitation: experiment.limitation,
           sources: experiment.sources,

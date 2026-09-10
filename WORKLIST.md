@@ -18,8 +18,15 @@
 
 ## After the lab is proven
 
-- [ ] Deploy the lab and API to Higgsfield; verify D1 database and runtime requirements.
-- [ ] Connect a licensed AlphaGenome service for supported live molecular predictions.
+- [x] Finish reference-control handling, replay startup, connection recovery, and the 3D fallback.
+- [x] Write the Higgsfield GPU handoff with official model/weight sources and an authenticated API contract.
+- [x] Build and integrate a native Higgsfield 3D Jutsu cell, with editable Blender source and asset provenance.
+- [x] Replace the dashboard-style opening with an immersive, responsive Cell → DNA → RNA journey.
+- [x] Implement the D1 hosting adapter and verify persistence, concurrent edits, validation, and recovery in automated tests.
+- [ ] Verify authorized model-weight access and run the first real AlphaGenome prediction on a Higgsfield GPU.
+- [ ] Connect the lab backend to the verified GPU service; persist and display actual reference/alternate numerical tracks.
+- [x] Deploy the lab and API to Higgsfield; verify D1 database and runtime requirements.
+- [ ] Verify the selected model/data license permits the intended public deployment.
 - [ ] Add the lab API as an AllMCP provider (the owner operates AllMCP).
 - [ ] Connect ChatGPT first, then Claude, as the conversation interface; no in-app chat or LangChain needed for the MVP.
 - [ ] Link each chat to the same experiment session displayed in the website.
@@ -33,6 +40,6 @@
 - Start with one complete experiment, then expand from user feedback.
 - Concept artwork is creative visualization, not a predicted human/creature phenotype.
 - AlphaGenome predicts selected molecular effects; a rendered creature is not evidence of what a DNA edit causes.
-- Keep API/data credentials server-side. Public deployment requires per-user experiment access.
+- Keep API/data credentials server-side. The public educational release uses unguessable collaboration links for edits to a fixed public sequence; private DNA or paid inference requires account-level ownership and authorization.
 
 This file records the agreed build scope. Checkboxes track delivered work, not promises.

@@ -6,7 +6,9 @@ Create a session with `POST /api/sessions`, optionally passing `{ "experimentId"
 
 Save changes with `PATCH /api/sessions/{id}`, supplying the current `revision`. Stale revisions return HTTP 409 with the current session. `selectedIndex` is a zero-based index in the displayed sequence and must be in `0..sequence.length-1`; both API validation and the persistence layer enforce this. `progress` ranges from 0 to 1. Changing the selected letter or alternate clears the previous result.
 
-`POST /api/sessions/{id}/run` returns `replayed` only for the predefined example; all other edits are `unscored`. It never calls a model or generates an effect score. `POST /api/sessions/{id}/reset` restores defaults. Both accept an optional `{ "revision": 0 }` to reject stale actions. `GET /api/sessions/{id}/export` downloads the session, evidence and explicit scientific limitations as readable JSON.
+`POST /api/sessions/{id}/run` returns `unchanged` when the selected alternate equals the reference base, `replayed` for the predefined mutation, or `unscored` for other mutations. An unchanged result is a reference control with no DNA mutation. Every run starts `progress` at zero; a curated replay also sets `view` to `rna` and `compare` to `true` in the same response. The `replayed` status means curated evidence is available, not that animation has finished. The API never calls a model or generates an effect score.
+
+`POST /api/sessions/{id}/reset` restores defaults. Run and reset both accept an optional `{ "revision": 0 }` to reject stale actions. `GET /api/sessions/{id}/export` downloads the session, evidence and explicit scientific limitations as readable JSON; unchanged controls are explicitly identified as having no mutation and no model call. Existing SQLite databases migrate automatically to support the unchanged status while preserving saved session fields.
 
 ## Deployment limits
 

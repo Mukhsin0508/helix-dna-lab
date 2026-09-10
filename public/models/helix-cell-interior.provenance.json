@@ -1,0 +1,48 @@
+{
+  "projectId": "206f98f8-bff7-4b91-b3de-603ffdb572d2",
+  "projectUrl": "https://higgsfield.ai/3d-jutsu/206f98f8-bff7-4b91-b3de-603ffdb572d2",
+  "revision": 1,
+  "authoring": "Original procedural Blender bpy scene via Higgsfield 3D Jutsu MCP",
+  "blenderVersion": "5.2.0 LTS",
+  "scientificStatus": "Stylized educational illustration, not measured anatomy or AlphaGenome output",
+  "date": "2026-09-10",
+  "meshCount": 118,
+  "nodeCount": 222,
+  "materialCount": 14,
+  "uniqueMeshTriangles": 90416,
+  "animations": 0,
+  "externalResources": false,
+  "coordinateSystem": "glTF meters, Y-up; cutaway faces +Z",
+  "nucleusCenter": [
+    -0.6,
+    0.15,
+    0.2
+  ],
+  "nucleusRadiusApprox": 2.05,
+  "extensionsUsed": [
+    "KHR_lights_punctual"
+  ],
+  "files": {
+    "helix-cell-interior.glb": {
+      "bytes": 1801628,
+      "sha256": "b9ee49ebdccb1073cd852144077b278a05b4c0fb505905f67b90f4b8d04495d2"
+    },
+    "helix-cell-interior.blend": {
+      "bytes": 2904103,
+      "sha256": "bbddaf892700760bb6d0e1914fd2dee3e977c1d593aae65f506b59bcb87dacd5"
+    },
+    "helix-cell-interior.py": {
+      "bytes": 9912,
+      "sha256": "f4bf7d9d81dffeb132992f255bb6eac269faf223e966cea7b52ddc98fd38a983"
+    },
+    "helix-cell-interior-preview.png": {
+      "bytes": 932439,
+      "sha256": "945366ffc474b18244541b084e3370800a81d6fc14aeae8da950be26949e09df"
+    }
+  },
+  "verification": {
+    "glb": "Validated glTF 2 binary length, self-contained buffers, 118 meshes, 222 nodes, 14 materials, 90,416 unique-mesh triangles.",
+    "nativePreview": "Committed revision 1 rendered with Blender EEVEE at 1000x750 and visually inspected; full cell within frame, no text or missing textures.",
+    "browserIntegration": "Renderer agent confirmed GLB loads and renders in Three.js without loader/runtime errors; renderer adjusts materials while preserving source asset bytes."
+  }
+}

@@ -1,0 +1,4 @@
+__pycache__/
+.venv/
+*.pyc
+dnm1-rna-*.json

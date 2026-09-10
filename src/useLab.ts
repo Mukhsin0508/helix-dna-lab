@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { request, RequestError } from "./apiClient";
 import type {
   ExperimentDefinition,
   LabSession,
@@ -6,35 +7,12 @@ import type {
   SessionPatch,
 } from "../shared/types";
 
-class RequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly session?: LabSession,
-  ) {
-    super(message);
+function savedSession(): string | null {
+  try {
+    return localStorage.getItem("helix-session");
+  } catch {
+    return null;
   }
-}
-
-async function request<T>(
-  path: string,
-  method = "GET",
-  body?: unknown,
-): Promise<T> {
-  const response = await fetch(path, {
-    method,
-    headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await response.json();
-  if (!response.ok)
-    throw new RequestError(
-      data.message || "The lab could not save this change.",
-      response.status,
-      data.session,
-    );
-  return data as T;
 }
 
 // Reuse initialization across React StrictMode's mount check without creating duplicate sessions.
@@ -47,7 +25,7 @@ async function initialize(): Promise<{
 }> {
   const experiments = await request<ExperimentDefinition[]>("/api/experiments");
   const explicitId = new URLSearchParams(location.search).get("session");
-  const savedId = explicitId || localStorage.getItem("helix-session");
+  const savedId = explicitId || savedSession();
   let session: LabSession | undefined;
   if (savedId) {
     try {
@@ -71,7 +49,14 @@ async function initialize(): Promise<{
     (item) => item.id === session!.experimentId,
   );
   if (!experiment) throw new Error("This experiment is unavailable.");
-  localStorage.setItem("helix-session", session.id);
+  try {
+    localStorage.setItem("helix-session", session.id);
+  } catch {
+    // Storage may be disabled; the session URL still restores the server record.
+  }
+  const url = new URL(location.href);
+  url.searchParams.set("session", session.id);
+  history.replaceState(null, "", url);
   return { session, experiment };
 }
 
@@ -80,6 +65,7 @@ export function useLab() {
   const [experiment, setExperiment] = useState<ExperimentDefinition>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [connected, setConnected] = useState(true);
   const current = useRef<LabSession | undefined>(undefined);
   const pending = useRef(0);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
@@ -88,6 +74,7 @@ export function useLab() {
     if (!alive.current) return;
     current.current = next;
     setSession(next);
+    setConnected(true);
   }, []);
 
   useEffect(() => {
@@ -111,6 +98,8 @@ export function useLab() {
       const startRevision = current.current.revision;
       void request<SessionEnvelope>(`/api/sessions/${current.current.id}`)
         .then(({ session: next }) => {
+          if (!alive.current) return;
+          setConnected(true);
           if (
             !pending.current &&
             current.current?.revision === startRevision &&
@@ -119,7 +108,7 @@ export function useLab() {
             accept(next);
         })
         .catch(() => {
-          /* A failed background read must not replace an unsaved foreground edit. */
+          if (alive.current) setConnected(false);
         });
     }, 2500);
     return () => {
@@ -149,6 +138,8 @@ export function useLab() {
             accept(next);
             return next;
           } catch (error) {
+            if (error instanceof RequestError && error.status === 0)
+              setConnected(false);
             if (
               error instanceof RequestError &&
               error.status === 409 &&
@@ -181,6 +172,7 @@ export function useLab() {
     experiment,
     error,
     busy,
+    connected,
     mutate,
     clearError: () => setError(""),
   };

@@ -2,6 +2,10 @@
 
 A visual laboratory for exploring a DNA edit, comparing molecular illustrations, and replaying one published splicing experiment. Built with React, TypeScript, Three.js, Fastify, and SQLite.
 
+**[Open the live lab](https://helix-dna-lab.higgsfield.app/)** · [Higgsfield community](https://higgsfield.ai/supercomputer/apps/00961b5d-05b8-430c-aef1-825c7c4368bf/view)
+
+The hosted version uses TanStack Start and D1. It includes a published experimental replay; live AlphaGenome inference remains unconnected.
+
 ## Run locally
 
 Node.js 22.16 or newer is required for the built-in SQLite module.
@@ -23,7 +27,7 @@ After building, `npm start` serves the compiled frontend and API together at **h
 
 ## What works
 
-- Orbit and zoom the 3D cell, DNA, and schematic RNA views.
+- Enter an original Blender cell built through Higgsfield 3D Jutsu, then travel to DNA and folded schematic RNA. Orbit, zoom, and pause the scene.
 - Select any of 41 verified reference bases and change its alternate letter.
 - Compare reference and edited DNA illustrations.
 - Replay the published DNM1 G→A splicing example, with pause, resume, scrub, and reset.
@@ -47,7 +51,9 @@ See [scientific evidence](docs/scientific-evidence.md) for reference coordinates
 
 The next integration is an AllMCP provider exposing this API to ChatGPT, then Claude. The website and assistant will work against the same authorized session. This avoids building another chat interface. Provider registration, remote MCP transport, authentication, and live inference are **not implemented yet**.
 
-Higgsfield deployment is also a later stage. Its documented web runtime uses Cloudflare Workers and optional D1. The local Fastify/SQLite adapter cannot be copied directly into that runtime; deploy behind a supported Node service or port the HTTP/database adapters. Before public access, implement per-user authentication, authorization, session ownership, and durable hosted storage. Do not expose the development server with a tunnel.
+The Higgsfield hosting adapter is in `deploy/higgsfield`: TanStack Start server routes run against D1, while the interactive scene renders on the visitor's GPU. The local Fastify adapter continues to use SQLite. See [hosting and verification](docs/hosting.md) for deployment status and the sync procedure.
+
+The educational release shares experiments through unguessable session links. Anyone with a link can read or edit that session; this is collaboration by possession of the link, not account authentication. It only accepts edits to the included public reference sequence. Private DNA uploads, model credentials, and live inference are not supported by the public API. Account ownership and authentication are required before adding private genomic data or paid model execution.
 
 For a company product, confirm the applicable AlphaGenome license and commercial inference route before adding live model calls. Never ship model or Higgsfield credentials in the browser.
 

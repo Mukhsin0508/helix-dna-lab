@@ -23,21 +23,23 @@ const idParameter = [
     in: "path",
     required: true,
     schema: { type: "string", format: "uuid" },
-    description: "UUID of a session stored on this local server.",
+    description: "Unguessable UUID of a session persisted in D1. Anyone with this ID or its session link can read, change, and export the session; it is a shared-link capability, not account authentication.",
   },
 ];
 const actionBody = {
-  required: false,
+  required: true,
   content: {
     "application/json": {
       schema: {
         type: "object",
         additionalProperties: false,
+        required: ["revision"],
         properties: {
           revision: {
             type: "integer",
             minimum: 0,
-            description: "When supplied, rejects stale updates with 409.",
+            maximum: Number.MAX_SAFE_INTEGER,
+            description: "Required current session revision. Stale updates are rejected with 409 and the latest session is returned.",
           },
         },
       },
@@ -45,19 +47,19 @@ const actionBody = {
   },
 };
 
-/** Portable API contract; authentication must be added before any public deployment. */
+/** Hosted API contract: persistent D1 sessions with shared-link access and optimistic revisions. */
 export const openApiDocument = {
   openapi: "3.1.0",
   info: {
     title: "DNA Lab API",
     version: "1.0.0",
     description:
-      "Local educational DNA explorer. Sessions persist in SQLite and use optimistic revisions. Runs return unchanged when the alternate matches the reference base, replayed for the predefined curated mutation, and unscored for other mutations. This API does not call AlphaGenome or generate scientific scores. The current server listens only on 127.0.0.1, has no authentication, and is not a public session-sharing service. Add authentication and authorization before public deployment. Request bodies are limited to 16 KiB; API clients are limited to 300 requests per minute per IP.",
+      "Hosted educational DNA explorer served over public HTTPS. Sessions persist in Cloudflare D1. New sessions and resets open in cell view. Every PATCH, run, and reset requires the current revision; an atomic revision check prevents concurrent clients from overwriting each other. Runs return unchanged when the alternate matches the reference base, replayed for the predefined curated mutation, and unscored for other mutations. This API does not call AlphaGenome or generate scientific scores. There is no account authentication: an unguessable session UUID or link is a shared capability, and anyone holding it can read, change, and export that session. Browser mutations must have a same-origin Origin header when one is supplied. Request bodies are limited to 16 KiB. Session requests share a fixed-window budget of 180 requests per minute per client IP; health, experiment discovery, and this schema endpoint are exempt. A 429 response includes Retry-After: 60.",
   },
   servers: [
     {
-      url: "http://127.0.0.1:4191",
-      description: "Local development or local production server",
+      url: "https://helix-dna-lab.higgsfield.app",
+      description: "Public hosted Helix DNA Lab API",
     },
   ],
   paths: {
@@ -68,7 +70,7 @@ export const openApiDocument = {
         responses: {
           "200": {
             description:
-              "API is running with local SQLite storage and curated replay mode.",
+              "API can access persistent D1 session storage and is operating in hosted curated replay mode.",
           },
         },
       },
@@ -95,7 +97,8 @@ export const openApiDocument = {
     "/api/sessions": {
       post: {
         operationId: "createSession",
-        summary: "Create an independent local session",
+        summary: "Create an independent persisted session",
+        description: "Creates a session with revision 0, view cell, compare false, progress 0, and status ready. Returns its unguessable UUID; sharing the session URL grants read and edit access to that session.",
         requestBody: {
           required: false,
           content: {
@@ -166,7 +169,7 @@ export const openApiDocument = {
         summary:
           "Identify an unchanged reference control, replay the curated example, or mark another mutation unscored",
         description:
-          "An alternate identical to the reference base at selectedIndex returns unchanged: the sequence has not mutated. Otherwise, only an exact match of the experiment defaultIndex and alternate returns replayed; this atomically sets view to rna and compare to true, ready to begin playback. Other mutations return unscored. Every run starts progress at 0. The replayed status identifies available curated evidence, not playback completion. No model is called, and no numeric effect score is generated for any result.",
+          "Requires a JSON body with the current revision. An alternate identical to the reference base at selectedIndex returns unchanged: the sequence has not mutated. Otherwise, only an exact match of the experiment defaultIndex and alternate returns replayed; this atomically sets view to rna and compare to true, ready to begin playback. Other mutations return unscored. Every run starts progress at 0. The replayed status identifies available curated evidence, not playback completion. No model is called, and no numeric effect score is generated for any result.",
         requestBody: actionBody,
         responses: {
           "200": sessionResponse,
@@ -182,7 +185,7 @@ export const openApiDocument = {
         operationId: "resetSession",
         summary: "Restore experiment defaults while retaining this session ID",
         description:
-          "Resets view to dna, compare to false, progress to zero and status to ready. Revision increments.",
+          "Requires a JSON body with the current revision. Restores the experiment default index and alternate, resets view to cell, compare to false, progress to zero and status to ready, and increments the revision. The session ID and creation time are retained.",
         requestBody: actionBody,
         responses: {
           "200": sessionResponse,

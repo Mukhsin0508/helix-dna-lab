@@ -5,3 +5,8 @@ test-results/
 playwright-report/
 .env
 qa-renderer/
+__pycache__/
+*.pyc
+.venv/
+.env.*
+!.env.example

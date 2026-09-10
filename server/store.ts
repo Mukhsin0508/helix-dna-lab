@@ -18,6 +18,22 @@ interface SessionRow {
   updated_at: string;
 }
 
+const createSessionsTable = `
+  CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    experiment_id TEXT NOT NULL,
+    selected_index INTEGER NOT NULL CHECK (selected_index >= 0),
+    alternate TEXT NOT NULL CHECK (alternate IN ('A', 'C', 'G', 'T')),
+    view TEXT NOT NULL CHECK (view IN ('cell', 'dna', 'rna')),
+    compare INTEGER NOT NULL CHECK (compare IN (0, 1)),
+    progress REAL NOT NULL CHECK (progress >= 0 AND progress <= 1),
+    status TEXT NOT NULL CHECK (status IN ('ready', 'replayed', 'unscored', 'unchanged')),
+    revision INTEGER NOT NULL CHECK (revision >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`;
+
 function toSession(row: SessionRow): LabSession {
   return {
     id: row.id,
@@ -54,20 +70,31 @@ export class SessionStore {
     this.database.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA busy_timeout = 5000;
-      CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY,
-        experiment_id TEXT NOT NULL,
-        selected_index INTEGER NOT NULL CHECK (selected_index >= 0),
-        alternate TEXT NOT NULL CHECK (alternate IN ('A', 'C', 'G', 'T')),
-        view TEXT NOT NULL CHECK (view IN ('cell', 'dna', 'rna')),
-        compare INTEGER NOT NULL CHECK (compare IN (0, 1)),
-        progress REAL NOT NULL CHECK (progress >= 0 AND progress <= 1),
-        status TEXT NOT NULL CHECK (status IN ('ready', 'replayed', 'unscored')),
-        revision INTEGER NOT NULL CHECK (revision >= 0),
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
     `);
+    this.database.exec(createSessionsTable);
+    const schema = this.database
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sessions'")
+      .get() as { sql: string };
+    if (!schema.sql.includes("'unchanged'")) {
+      // SQLite cannot alter a CHECK constraint in place. Preserve every saved field.
+      try {
+        this.database.exec(`
+          BEGIN IMMEDIATE;
+          ALTER TABLE sessions RENAME TO sessions_before_unchanged;
+          ${createSessionsTable}
+          INSERT INTO sessions
+            (id, experiment_id, selected_index, alternate, view, compare, progress, status, revision, created_at, updated_at)
+          SELECT id, experiment_id, selected_index, alternate, view, compare, progress, status, revision, created_at, updated_at
+          FROM sessions_before_unchanged;
+          DROP TABLE sessions_before_unchanged;
+          COMMIT;
+        `);
+      } catch (error) {
+        if (this.database.isTransaction) this.database.exec("ROLLBACK");
+        this.database.close();
+        throw error;
+      }
+    }
   }
 
   create(experiment: ExperimentDefinition): LabSession {
