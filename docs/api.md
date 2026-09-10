@@ -1,5 +1,15 @@
 # DNA Lab API
 
+## Saved comparison workspaces
+
+`POST /api/workspaces` with `{}` creates a workspace with one published-evidence comparison. `GET /api/workspaces/{id}` returns `{ "workspace": ... }`. `PATCH /api/workspaces/{id}` accepts `{ "revision": 0, "candidates": [...] }` and replaces the alternatives atomically. A stale revision returns 409 with the latest workspace; preserve and reconcile unsaved edits instead of retrying over another writer.
+
+Each candidate stores its title, question, scenario, comparison settings, notes, creation time and UUID. There must be 1–20 distinct candidates. Titles are limited to 80 characters, questions to 500 and notes to 3,000, subject to the total 16 KiB request limit. Supported scenarios are the fixed sickle-cell evidence case and the existing DNM1 reference window. Candidate records contain no model result or efficacy score. Saving, duplicating or exporting does not perform inference.
+
+The hosted adapter persists these records in an additive D1 table; local development uses SQLite. Hosted workspace URLs are collaboration capabilities: anyone with the link can read or edit the workspace. Do not include private patient information. Workspace endpoints and their schemas are also present in `/api/openapi.json`.
+
+## Molecular replay sessions
+
 Run `npm run dev` for the browser on `127.0.0.1:4190` and API on `127.0.0.1:4191`. After `npm run build`, `npm start` also serves the built browser app on API port 4191. SQLite sessions persist in `.data/sessions.sqlite`. The full route contract is available at `/api/openapi.json`.
 
 Create a session with `POST /api/sessions`, optionally passing `{ "experimentId": "dnm1-splice-replay" }`. Read it with `GET /api/sessions/{id}`. Session responses use `{ "session": ... }`.
@@ -17,3 +27,5 @@ The server binds only to loopback and has no authentication or per-user authoriz
 Requests have a 16 KiB body limit and a 300 requests/minute/IP limit. Only the built `dist` directory is served as static content. Keep database files and any future model credentials outside it; future model calls belong on the server.
 
 The static plugin is updated to `@fastify/static` 10.1.3 or later in that major version. Its [official compatibility table](https://github.com/fastify/fastify-static#compatibility) supports Fastify 5. The application uses Node 22's built-in SQLite API, which emits an experimental-feature notice on Node 22.16.
+
+Workspace PATCH requests allow up to 512 KiB so all 20 comparisons can hold their full notes. Other request bodies retain the 16 KiB limit.

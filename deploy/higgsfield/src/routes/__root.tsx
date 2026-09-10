@@ -27,7 +27,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ({reset}) => <main style={{padding:'12vh 8vw'}}><h1>The lab couldn’t load</h1><button onClick={reset}>Try again</button></main>,
 });
 function Shell({children}:{children:ReactNode}) {
-  return <html lang="en" style={{colorScheme:'dark'}}><head><HeadContent /></head><body>{children}<Scripts /></body></html>;
+  return <html lang="en" style={{colorScheme:'light'}}><head><HeadContent /></head><body>{children}<Scripts /></body></html>;
 }
 function Root() {
   const {queryClient} = Route.useRouteContext();

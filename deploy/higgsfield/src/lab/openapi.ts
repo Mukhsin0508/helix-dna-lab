@@ -1,3 +1,5 @@
+import { workspacePaths, workspaceSchemas } from "../shared/workbench-openapi";
+
 const sessionReference = { $ref: "#/components/schemas/Session" };
 const errorResponse = {
   description: "Request rejected.",
@@ -51,8 +53,8 @@ const actionBody = {
 export const openApiDocument = {
   openapi: "3.1.0",
   info: {
-    title: "DNA Lab API",
-    version: "1.0.0",
+    title: "Helix Workspace API",
+    version: "1.1.0",
     description:
       "Hosted educational DNA explorer served over public HTTPS. Sessions persist in Cloudflare D1. New sessions and resets open in cell view. Every PATCH, run, and reset requires the current revision; an atomic revision check prevents concurrent clients from overwriting each other. Runs return unchanged when the alternate matches the reference base, replayed for the predefined curated mutation, and unscored for other mutations. This API does not call AlphaGenome or generate scientific scores. There is no account authentication: an unguessable session UUID or link is a shared capability, and anyone holding it can read, change, and export that session. Browser mutations must have a same-origin Origin header when one is supplied. Request bodies are limited to 16 KiB. Session requests share a fixed-window budget of 180 requests per minute per client IP; health, experiment discovery, and this schema endpoint are exempt. A 429 response includes Retry-After: 60.",
   },
@@ -63,6 +65,7 @@ export const openApiDocument = {
     },
   ],
   paths: {
+    ...workspacePaths,
     "/api/health": {
       get: {
         operationId: "getHealth",
@@ -256,6 +259,7 @@ export const openApiDocument = {
   },
   components: {
     schemas: {
+      ...workspaceSchemas,
       Error: {
         type: "object",
         required: ["error", "message"],

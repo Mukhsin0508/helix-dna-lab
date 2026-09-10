@@ -11,6 +11,7 @@ import type {
 } from "../shared/types.ts";
 import { openApiDocument } from "./openapi.ts";
 import { SessionStore } from "./store.ts";
+import { registerWorkspaceRoutes } from "./workbench.ts";
 
 const baseSchema = z.enum(["A", "C", "G", "T"]);
 const revisionSchema = z
@@ -151,6 +152,8 @@ export async function createApp(dbPath: string): Promise<FastifyInstance> {
   }));
   app.get("/api/experiments", async () => EXPERIMENTS);
   app.get("/api/openapi.json", async () => openApiDocument);
+
+  registerWorkspaceRoutes(app, dbPath);
 
   app.post("/api/sessions", async (request, reply) => {
     const body = createSchema.parse(request.body ?? {});

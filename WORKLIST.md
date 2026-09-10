@@ -1,5 +1,19 @@
 # Helix DNA Lab — worklist
 
+## Current direction: outcome and evidence workspace
+
+The owner replaced the guided educational journey with a spacious workspace for investigating outcomes and rapidly comparing alternatives. The older release checklist below is historical, not the current product acceptance criteria. See [the outcome workspace contract](docs/OUTCOME_WORKSPACE.md).
+
+- [x] Add persistent comparison candidates, duplication support, notes and revision-protected updates in SQLite and D1.
+- [x] Add an interactive blood-cell illustration and the exact historical Casgevy trial endpoint, with its source, denominator and date.
+- [x] Replace the landing-page layout with a workspace: outcome viewport, direct setup, evidence inspector and alternatives review.
+- [x] Verify duplicate, edit, switch, save, reload and export through the browser on desktop and mobile.
+- [ ] Deploy the revised workspace and verify public persistence and the existing session API.
+- [ ] Connect actual inference with model provenance and numerical results for a supported endpoint.
+- [ ] Validate prediction quality against held-out experimental measurements before claiming predictive research utility.
+
+Saving a hypothesis or changing an illustration does not run a model. Vaccine success probabilities and whole-organism phenotype predictions are not supported by the current engine.
+
 ## First working release
 
 - [x] Create a dedicated GitHub repository on the owner's personal account.

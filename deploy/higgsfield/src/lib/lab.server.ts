@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { DEFAULT_EXPERIMENT, EXPERIMENTS } from '../shared/experiments'
 import type { LabSession } from '../shared/types'
+import { WORKSPACE_BODY_LIMIT } from '../shared/workbench'
+import { handleWorkspaceRequest } from './workbench.server'
 
 /** Only the D1 operations used by this API; tests provide real SQLite statements. */
 export interface LabStatement {
@@ -42,9 +44,9 @@ class RequestFailure extends Error {
   }
 }
 
-async function body(request: Request): Promise<unknown> {
+async function body(request: Request, limit = BODY_LIMIT): Promise<unknown> {
   const length = Number(request.headers.get('content-length') || 0)
-  if (length > BODY_LIMIT) throw new RequestFailure(413, 'Request is too large.', 'body_too_large')
+  if (length > limit) throw new RequestFailure(413, 'Request is too large.', 'body_too_large')
   if (!request.body) return {}
   const mediaType = request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase()
   if (mediaType !== 'application/json') throw new RequestFailure(415, 'Use JSON for requests.')
@@ -57,7 +59,7 @@ async function body(request: Request): Promise<unknown> {
       const part = await reader.read()
       if (part.done) break
       size += part.value.byteLength
-      if (size > BODY_LIMIT) {
+      if (size > limit) {
         await reader.cancel()
         throw new RequestFailure(413, 'Request is too large.', 'body_too_large')
       }
@@ -146,6 +148,8 @@ export function createLabHandler(db: LabDatabase | undefined): (request: Request
         if (origin && origin !== url.origin) throw new RequestFailure(403, 'Cross-site changes are not allowed.')
       }
       await budget(db, request)
+      const workspaceResponse = await handleWorkspaceRequest(db, request, req => body(req, method === 'PATCH' ? WORKSPACE_BODY_LIMIT : BODY_LIMIT))
+      if (workspaceResponse) return workspaceResponse
       if (pathname === '/api/sessions' && method === 'POST') {
         const data = createSchema.parse(await body(request))
         const experiment = data.experimentId ? EXPERIMENTS.find(e => e.id === data.experimentId) : DEFAULT_EXPERIMENT
