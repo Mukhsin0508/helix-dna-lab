@@ -2,19 +2,19 @@
 
 ## First working release
 
-- [ ] Create a dedicated GitHub repository on the owner's personal account.
+- [x] Create a dedicated GitHub repository on the owner's personal account.
 - [x] Scaffold React + TypeScript frontend and Node.js API.
-- [ ] Build a dark, minimal, responsive laboratory, consistent with the Cerebra visual direction.
-- [ ] Render an interactive 3D cell, DNA helix, and RNA view; support orbit, zoom, pause, and replay.
-- [ ] Select a DNA letter and compare reference versus alternate views.
-- [ ] Recreate the published DNM1 splice-change example with traceable sources.
-- [ ] Keep measured evidence, published predictions, and illustrative motion distinguishable.
-- [ ] Mark arbitrary edits as unscored; never fabricate AlphaGenome output or organism traits.
-- [ ] Save and restore experiments with a persistent database and revision checks.
-- [ ] Expose a documented session API usable by the website and future MCP tools.
-- [ ] Add a Higgsfield-generated concept view for imagined people/creatures, visibly marked Concept.
-- [ ] Test controls, persistence, API errors, mobile layout, and browser rendering.
-- [ ] Open the working lab for review and push the source to GitHub.
+- [x] Build a dark, minimal, responsive laboratory, consistent with the Cerebra visual direction.
+- [x] Render an interactive 3D cell, DNA helix, and RNA view; support orbit, zoom, pause, and replay.
+- [x] Select a DNA letter and compare reference versus alternate views.
+- [x] Recreate the published DNM1 splice-change example with traceable sources.
+- [x] Keep measured evidence, published predictions, and illustrative motion distinguishable.
+- [x] Mark arbitrary edits as unscored; never fabricate AlphaGenome output or organism traits.
+- [x] Save and restore experiments with a persistent database and revision checks.
+- [x] Expose a documented session API usable by the website and future MCP tools.
+- [x] Add a Higgsfield-generated concept view for imagined people/creatures, visibly marked Concept.
+- [x] Test controls, persistence, API errors, mobile layout, and browser rendering.
+- [x] Open the working lab for review and push the source to GitHub.
 
 ## After the lab is proven
 
