@@ -56,7 +56,7 @@ export const servicePredictionResultSchema = z.object({
   referenceGenome: z.object({
     referenceUrl: z.literal(REFERENCE_URL),
     indexUrl: z.literal(`${REFERENCE_URL}.fai`),
-    referenceHeaders: z.record(z.unknown()),
+    referenceHeaders: z.record(z.string(), z.unknown()),
     indexSha256: z.literal("9293fb33f63b7f09d8fadc055d78e401d07c76de0211243fba778780ff836ff9"),
     assembly: z.literal("GRCh38"), referenceVersion: z.literal("GRCh38.p13"),
     contextSha256: sha256, contextBases: z.literal(1_048_576),
@@ -77,7 +77,7 @@ export const servicePredictionResultSchema = z.object({
   }).passthrough(),
   annotationSettings: z.object({ geneMasks: z.boolean(), spliceJunctionAnnotations: z.boolean(), variantCalibration: z.literal(false) }).passthrough(),
   tracks: z.array(sourceTrackSchema).min(1).max(Math.floor(ANALYSIS_ROW_LIMIT / 41), `The complete result exceeds ${ANALYSIS_ROW_LIMIT} analytical rows; import an explicitly narrower upstream result.`),
-  benchmark: z.record(z.unknown()).nullable().optional(),
+  benchmark: z.record(z.string(), z.unknown()).nullable().optional(),
 }).passthrough().superRefine((result, context) => {
   const descriptor = referenceEvidence.variants.find(variant => variant.position === result.variant.position);
   if (!descriptor) {

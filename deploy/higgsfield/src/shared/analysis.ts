@@ -97,6 +97,20 @@ export const trackRowSchema = z.object({
   track: boundedText(500),
 }).strict();
 
+/** Splice-junction signal, with genomic endpoints ordered independently of transcription strand. */
+export const junctionRowSchema = z.object({
+  chromosome: chromosomeSchema,
+  start: safeIntegerSchema,
+  end: safeIntegerSchema,
+  strand: z.enum(["+", "-"]),
+  track: boundedText(500),
+  reference: z.number().finite().min(0).nullable(),
+  alternate: z.number().finite().min(0).nullable(),
+}).strict().superRefine((row, context) => {
+  if (row.end <= row.start) context.addIssue({ code: z.ZodIssueCode.custom, path: ["end"], message: "Junction endpoints must be ascending, with exclusive end greater than start, on either strand." });
+  if (row.reference === null && row.alternate === null) context.addIssue({ code: z.ZodIssueCode.custom, path: ["reference"], message: "A junction requires at least one supplied allele value; missing values are not zero." });
+});
+
 /** A dataset represents one assay endpoint and one explicitly described condition aggregate. */
 export const experimentSchema = z.object({
   assay: boundedText(500),
@@ -141,6 +155,23 @@ export const analysisTrackMetadataSchema = z.object({
   if (metadata.scope === "biosample_specific" && metadata.biosampleId === null && metadata.biosampleName === null) context.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: "Biosample-specific tracks require a biosample name or identifier." });
 });
 
+/** Junctions connect two genomic endpoints; they are not fixed-width coverage bins. */
+export const junctionTrackMetadataSchema = z.object({
+  chromosome: chromosomeSchema,
+  track: boundedText(500),
+  outputType: z.literal("SPLICE_JUNCTIONS"),
+  unit: boundedText(500).nullable(),
+  strand: strandSchema.nullable(),
+  biosampleId: boundedText(200).nullable(),
+  biosampleName: boundedText(300).nullable(),
+  scope: z.enum(["biosample_specific", "tissue_agnostic", "unspecified"]),
+  sourceName: boundedText(500).optional(),
+  sourceIndex: safeIntegerSchema.optional(),
+}).strict().superRefine((metadata, context) => {
+  if (metadata.scope === "tissue_agnostic" && (metadata.biosampleId !== null || metadata.biosampleName !== null)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: "Tissue-agnostic junction tracks must not be assigned a biosample." });
+  if (metadata.scope === "biosample_specific" && metadata.biosampleId === null && metadata.biosampleName === null) context.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: "Biosample-specific junction tracks require a biosample name or identifier." });
+});
+
 const datasetBase = {
   schemaVersion: z.literal(1),
   id: boundedText(200),
@@ -164,6 +195,14 @@ export const measurementDatasetSchema = z.object({
   experiment: experimentSchema,
   rows: z.array(measurementRowSchema).min(1).max(ANALYSIS_ROW_LIMIT),
 }).strict();
+export const junctionDatasetSchema = z.object({
+  ...datasetBase,
+  kind: z.literal("junctions"),
+  interval: analysisIntervalSchema,
+  variant: variantSchema.optional(),
+  rows: z.array(junctionRowSchema).min(1).max(ANALYSIS_ROW_LIMIT),
+  trackMetadata: z.array(junctionTrackMetadataSchema).min(1).max(ANALYSIS_ROW_LIMIT),
+}).strict();
 
 // UCSC primary hg38 chromosome sizes, verified 2026-09-11:
 // https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.chrom.sizes
@@ -177,7 +216,7 @@ const human38Lengths: Readonly<Record<string, number>> = {
   chrM: 16569,
 };
 
-export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetSchema, trackDatasetSchema, measurementDatasetSchema])
+export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetSchema, trackDatasetSchema, measurementDatasetSchema, junctionDatasetSchema])
   .superRefine((dataset, context) => {
     const hg38 = /^(?:GRCh38(?:\.p\d+)?(?:\/hg38)?|hg38)$/i.test(dataset.provenance.assembly);
     const seen = new Set<string>();
@@ -211,6 +250,45 @@ export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetS
         if ((unit === "fraction" && (row.value < 0 || row.value > 1)) || (unit === "percent" && (row.value < 0 || row.value > 100)) || (unit === "count" && row.value < 0)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "value"], message: `Measurement value is outside the valid range for ${unit} units.` });
       });
     }
+    if (dataset.kind === "junctions") {
+      const { interval } = dataset;
+      if (hg38 && interval.end > human38Lengths[interval.chromosome]) context.addIssue({ code: z.ZodIssueCode.custom, path: ["interval", "end"], message: "Junction display interval exceeds this GRCh38 chromosome's length." });
+      if (dataset.variant) {
+        const [chromosome, position] = dataset.variant.split(":");
+        if (chromosome !== interval.chromosome) context.addIssue({ code: z.ZodIssueCode.custom, path: ["variant"], message: "Junction variant must use the same chromosome as the display interval." });
+        if (hg38 && Number(position) > human38Lengths[chromosome]) context.addIssue({ code: z.ZodIssueCode.custom, path: ["variant"], message: "Variant position exceeds this GRCh38 chromosome's length." });
+        if (inference && dataset.variant !== inference.variant) context.addIssue({ code: z.ZodIssueCode.custom, path: ["variant"], message: "Junction variant differs from the exact variant recorded in inference provenance." });
+      }
+      if (inference) {
+        const display = inference.displayInterval;
+        if (interval.chromosome !== display.chromosome || interval.start !== display.start || interval.end !== display.end) context.addIssue({ code: z.ZodIssueCode.custom, path: ["interval"], message: "Junction display interval must equal the recorded inference display interval." });
+        const referenceIsHg38 = /^(?:GRCh38(?:\.p\d+)?(?:\/hg38)?|hg38)$/i.test(inference.referenceVersion);
+        if (hg38 !== referenceIsHg38 || (!hg38 && dataset.provenance.assembly.toLowerCase() !== inference.referenceVersion.toLowerCase())) context.addIssue({ code: z.ZodIssueCode.custom, path: ["provenance", "inference", "referenceVersion"], message: "Junction inference reference version and dataset assembly must describe the same genome assembly." });
+      }
+      const metadataByPair = new Map<string, JunctionTrackMetadata>();
+      dataset.trackMetadata.forEach((metadata, index) => {
+        const key = JSON.stringify([metadata.chromosome, metadata.track]);
+        if (metadataByPair.has(key)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["trackMetadata", index], message: "Duplicate junction metadata for a chromosome and track pair." });
+        metadataByPair.set(key, metadata);
+      });
+      const usedPairs = new Set<string>();
+      dataset.rows.forEach((row, index) => {
+        const pair = JSON.stringify([row.chromosome, row.track]);
+        const key = JSON.stringify([row.chromosome, row.start, row.end, row.strand, row.track]);
+        if (seen.has(key)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index], message: "Duplicate junction endpoints, strand and track; no aggregation is inferred." });
+        seen.add(key);
+        if (row.chromosome !== interval.chromosome || row.start >= interval.end || row.end <= interval.start) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index], message: "Every junction must overlap the display interval; spanning endpoints are retained." });
+        if (hg38 && row.end > human38Lengths[row.chromosome]) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "end"], message: "Junction endpoint exceeds this GRCh38 chromosome's length." });
+        if (inference && (row.chromosome !== inference.inputInterval.chromosome || row.start < inference.inputInterval.start || row.end > inference.inputInterval.end)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index], message: "Junction endpoints must remain within the recorded model input interval." });
+        const metadata = metadataByPair.get(pair);
+        if (!metadata) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "track"], message: "Every junction row requires matching chromosome and track metadata." });
+        else if ((metadata.strand === "+" || metadata.strand === "-") && row.strand !== metadata.strand) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "strand"], message: "Junction strand differs from its strand-specific track metadata." });
+        usedPairs.add(pair);
+      });
+      dataset.trackMetadata.forEach((metadata, index) => {
+        if (!usedPairs.has(JSON.stringify([metadata.chromosome, metadata.track]))) context.addIssue({ code: z.ZodIssueCode.custom, path: ["trackMetadata", index], message: "Declared junction metadata has no matching data rows." });
+      });
+    }
     if (dataset.kind === "tracks" && dataset.trackMetadata) {
       const metadataPairs = new Set<string>();
       dataset.trackMetadata.forEach((metadata, metadataIndex) => {
@@ -235,12 +313,15 @@ export type AnalysisDataset = z.infer<typeof analysisDatasetSchema>;
 export type ScoreDataset = z.infer<typeof scoreDatasetSchema>;
 export type TrackDataset = z.infer<typeof trackDatasetSchema>;
 export type MeasurementDataset = z.infer<typeof measurementDatasetSchema>;
+export type JunctionDataset = z.infer<typeof junctionDatasetSchema>;
 export type ScoreRow = z.infer<typeof scoreRowSchema>;
 export type TrackRow = z.infer<typeof trackRowSchema>;
 export type MeasurementRow = z.infer<typeof measurementRowSchema>;
+export type JunctionRow = z.infer<typeof junctionRowSchema>;
 export type Experiment = z.infer<typeof experimentSchema>;
 export type AnalysisProvenance = z.infer<typeof analysisProvenanceSchema>;
 export type AnalysisTrackMetadata = z.infer<typeof analysisTrackMetadataSchema>;
+export type JunctionTrackMetadata = z.infer<typeof junctionTrackMetadataSchema>;
 export type AnalysisInference = z.infer<typeof analysisInferenceSchema>;
 export type AnalysisInterval = z.infer<typeof analysisIntervalSchema>;
 

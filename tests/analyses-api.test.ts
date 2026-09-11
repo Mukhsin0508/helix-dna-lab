@@ -7,7 +7,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import test from 'node:test';
 import { createApp } from '../server/app.ts';
 import { AnalysisStore } from '../server/analyses.ts';
-import type { MeasurementDataset, ScoreDataset, TrackDataset } from '../shared/analysis.ts';
+import type { JunctionDataset, MeasurementDataset, ScoreDataset, TrackDataset } from '../shared/analysis.ts';
 import { ANALYSIS_BODY_LIMIT, type AnalysisInput, type AnalysisRecord } from '../shared/analysis-record.ts';
 
 const migration = readFileSync(new URL('../deploy/higgsfield/migrations/0002_helix.sql', import.meta.url), 'utf8');
@@ -50,6 +50,48 @@ type Call = (
   headers?: Record<string, string>, raw?: boolean,
 ) => Promise<Response>;
 interface Harness { call: Call; close(): Promise<void> }
+
+for (const kind of ['local', 'cloud'] as const) {
+  test(`${kind}: junction arcs retain spanning endpoints, missing alleles and metadata through save and update`, async () => {
+    const store = await harness(kind);
+    try {
+      const dataset: JunctionDataset = {
+        schemaVersion: 1, id: 'synthetic-junction-api-test', kind: 'junctions', title: 'Synthetic API test only',
+        provenance: { sourceUrl: '', sourceLabel: 'Synthetic unit test', assembly: 'GRCh38.p13', model: 'Test only', context: 'No inference performed', mode: 'imported' },
+        interval: { chromosome: 'chr9', start: 128226006, end: 128226047, coordinateSystem: '0-based-half-open' },
+        variant: 'chr9:128226027:G>A',
+        rows: [
+          { chromosome: 'chr9', start: 128225900, end: 128226090, strand: '-', track: 'test', reference: 0.12345678901234568, alternate: null },
+          { chromosome: 'chr9', start: 128226010, end: 128226034, strand: '-', track: 'test', reference: null, alternate: 4.5 },
+        ],
+        trackMetadata: [{ chromosome: 'chr9', track: 'test', outputType: 'SPLICE_JUNCTIONS', unit: null, strand: '-', biosampleId: null,
+          biosampleName: 'Synthetic biosample', scope: 'biosample_specific', sourceName: 'Original test name', sourceIndex: 0 }],
+      };
+      const settings = { ...input().settings, chart: 'junctions' as const, modality: 'SPLICE_JUNCTIONS', scorer: '', gene: '', track: '', variant: '', metric: 'score' as const };
+      const created = await analysisOf(await store.call('/api/analyses', 'POST', { dataset, settings }), 201);
+      assert.deepEqual((await analysisOf(await store.call(`/api/analyses/${created.id}`))).dataset, dataset);
+      const path = `/api/analyses/${created.id}`;
+      const updatedDataset = structuredClone(dataset); updatedDataset.rows[0].alternate = 0;
+      const updated = await analysisOf(await store.call(path, 'PATCH', { dataset: updatedDataset, settings: { ...settings, chart: 'table' }, revision: 0 }));
+      assert.equal(updated.revision, 1);
+      assert.deepEqual(updated.dataset, updatedDataset);
+      for (const invalid of [
+        { dataset: { ...dataset, trackMetadata: [] }, settings },
+        { dataset: { ...dataset, rows: [...dataset.rows, dataset.rows[0]] }, settings },
+        { dataset: { ...dataset, rows: [{ ...dataset.rows[0], reference: null, alternate: null }] }, settings },
+        { dataset, settings: { ...settings, metric: 'quantile' } },
+        { dataset, settings: { ...settings, chart: 'tracks' } },
+      ]) {
+        assert.equal((await store.call('/api/analyses', 'POST', invalid)).status, 400);
+        assert.equal((await store.call(path, 'PATCH', { ...invalid, revision: 1 })).status, 400);
+      }
+      assert.deepEqual(await analysisOf(await store.call(path)), updated);
+      const specification = await (await store.call('/api/openapi.json')).json() as { components: { schemas: Record<string, unknown> } };
+      assert.ok(specification.components.schemas.AnalysisJunctionRow);
+      assert.ok(specification.components.schemas.AnalysisJunctionTrackMetadata);
+    } finally { await store.close(); }
+  });
+}
 
 for (const kind of ['local', 'cloud'] as const) {
   test(`${kind}: source-reported track provenance survives saving and retrieval without inventing unknown units`, async () => {

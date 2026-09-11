@@ -44,6 +44,9 @@ python inference/run_dnm1.py \
 
 Resolve glutamatergic-neuron identifiers from loaded-model metadata. Preserve all returned biological tracks in RNA_SEQ, SPLICE_SITES and SPLICE_SITE_USAGE, keeping SPLICE_SITES tissue independent. Missing supported outputs or incompatible metadata must fail explicitly, not become a different tissue. The first crop fits the lab's 5000-row/2-MiB contract and is applied only after full-context prediction. Do not normalize or invent uncertainty.
 
+JUNCTION FIGURE
+The website also accepts actual splice-junction results. For that output, use the same command with --outputs SPLICE_JUNCTIONS --crop-bp 32768 and a new --output filename such as dnm1-junctions.json. Request junctions alone; do not combine them with positional outputs. Full-context inference still runs before the display-overlap selection. Keep the returned genomic endpoints and original track metadata, including crossing arcs outside the visible interval. The runner aligns REF/ALT by junction and track identity; an absent allele stays null, while a supplied zero stays zero. Do not recode either as a probability. Return both dnm1-junctions.json and dnm1-junctions.source-result.json. This is an additional output mode, not evidence that the model has run.
+
 DELIVER THE FIRST PROOF
 Return the actual dnm1-analysis.json and its dnm1-analysis.source-result.json sidecar. The first is directly importable in Helix; the second preserves actual arrays, original metadata, runtime provenance and source hashes. Preserve both; the analysis references the exact raw-file SHA-256. Report real GPU configuration, load/prediction timing and observed memory metrics, marking unavailable measurements.
 

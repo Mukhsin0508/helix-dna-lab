@@ -76,6 +76,7 @@ function parseCSV(text: string): string[][] {
 const scoreColumns = ["variant", "biosample", "modality", "scorer", "score", "quantile", "gene", "track", "unit", "signed", "trackStrand", "assay", "sourceRowIndex", "scoredInterval", "geneId", "geneStrand", "histoneMark"] as const;
 const trackColumns = ["chromosome", "position", "reference", "alternate", "track"] as const;
 const measurementColumns = ["variant", "gene", "value", "reportedValue", "replicates", "standardError", "sourceRowIndex"] as const;
+const junctionColumns = ["chromosome", "start", "end", "strand", "track", "reference", "alternate"] as const;
 
 function csvObjects(text: string, allowed: readonly string[], required: readonly string[]): Record<string, unknown>[] {
   const [first, ...records] = parseCSV(text);
@@ -129,10 +130,10 @@ export function parseTrackCSV(text: string, provenance?: ImportProvenance, title
   return validateDataset({ schemaVersion: 1, id: crypto.randomUUID(), title, kind: "tracks", provenance: metadata, rows }) as TrackDataset;
 }
 
-/** Lossless scalar CSV export. JSON retains experiment metadata and provenance; null means unknown. */
+/** Lossless scalar CSV export. JSON retains metadata, intervals and provenance; null means unavailable. */
 export function datasetToCSV(value: AnalysisDataset): string {
   const dataset = validateDataset(value);
-  const columns = dataset.kind === "scores" ? scoreColumns : dataset.kind === "tracks" ? trackColumns : measurementColumns;
+  const columns = dataset.kind === "scores" ? scoreColumns : dataset.kind === "tracks" ? trackColumns : dataset.kind === "junctions" ? junctionColumns : measurementColumns;
   const quote = (value: unknown): string => {
     const text = value === undefined ? "" : String(value);
     return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;

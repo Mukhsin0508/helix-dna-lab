@@ -1,6 +1,6 @@
 # Local AlphaGenome DNM1 runner
 
-Run an explicitly selected DNM1 variant against an authorized local checkpoint and export actual reference/alternate tracks for Helix. **Full-model inference has not run or been validated on a GPU in this task.** The runner, reference checks and import contract are preparation for that first real run.
+Run an explicitly selected DNM1 variant against an authorized local checkpoint and export actual reference/alternate positional tracks or splice junctions for Helix. **Full-model inference has not run or been validated on a GPU in this task.** The runner, reference checks and import contract are preparation for that first real run.
 
 The two supported cases are `chr9:128225994:G>A` and the user's requested **`chr9:128226027:G>A`**. `--variant` is required. Each case has its own independently retrieved full-context hash, reference excerpt and coordinates in [data/reference](../data/reference/README.md). Changing the result label cannot change the underlying reference case.
 
@@ -45,20 +45,49 @@ The default exact biosample is `glutamatergic neuron`. Default outputs are `RNA_
 
 The full model input is 1,048,576 bases. The local extracted context, reference allele and independent 41-base excerpt must match the selected descriptor before model loading. The installed official interval classes must reproduce the verified coordinates. Both species' metadata are retained for checkpoint shape validation while only human reference resources are needed.
 
-Default `--crop-bp 41` is applied after full-context inference. The requested window and all returned biological tracks must fit 5000 rows and 2 MiB. Larger explicit crops are allowed only within those limits; oversized results fail rather than being truncated, downsampled or silently losing tracks. REF and ALT metadata, dimensions, coordinates and finite values are checked.
+For positional outputs, default `--crop-bp 41` is applied after full-context inference. The requested window and all returned biological tracks must fit 5000 rows and 2 MiB. Larger explicit crops are allowed only within those limits; oversized results fail rather than being truncated, downsampled or silently losing tracks. REF and ALT metadata, dimensions, coordinates and finite values are checked.
+
+## Splice-junction output
+
+Request `SPLICE_JUNCTIONS` alone, using the same checkpoint/reference/annotation arguments:
+
+```sh
+python inference/run_dnm1.py \
+  --variant 'chr9:128226027:G>A' \
+  --checkpoint /absolute/path/to/authorized-hf-snapshot \
+  --fasta /absolute/path/to/GRCh38.p13.genome.fa \
+  --gtf /absolute/path/to/gencode.v46.annotation.gtf.gz.feather \
+  --splice-site-starts /absolute/path/to/gencode.v46.splice_sites_starts.feather \
+  --splice-site-ends /absolute/path/to/gencode.v46.splice_sites_ends.feather \
+  --outputs SPLICE_JUNCTIONS \
+  --crop-bp 32768 \
+  --output /absolute/path/to/results/dnm1-junctions.json
+```
+
+Junction mode defaults to a 32,768-base centered display if `--crop-bp` is omitted. Its explicit crop may extend up to the full verified input. The 5000-row limit counts **aligned junctions × tracks**, not display bases; both raw and analytical files must fit 2 MiB. Junction and positional outputs cannot share one run/dataset.
+
+The [pinned `JunctionData` class](https://github.com/google-deepmind/alphagenome/blob/aa6fc8f6faadcb8c910fa2b85b57386fbd5c7b5d/src/alphagenome/data/junction_data.py) provides a junctions × tracks matrix, track metadata and genomic junction objects. The [research converter](https://github.com/google-deepmind/alphagenome_research/blob/0db53bd4352c66d1e00a049a81da373a066e6670/src/alphagenome_research/model/dna_model.py) obtains absolute junction coordinates from the [official unstacker](https://github.com/google-deepmind/alphagenome_research/blob/0db53bd4352c66d1e00a049a81da373a066e6670/src/alphagenome_research/model/variant_scoring/splice_junction.py). These returned `start`/`end` values are already zero-based and half-open. The exporter copies them without another offset or strand reversal.
+
+Every returned arc overlapping the display is retained, including arcs whose endpoints extend outside it; both endpoints must remain inside the verified model input. No signal threshold, normalization or rounding is applied. REF and ALT are aligned by chromosome, start, end, strand and original track identity, independently of matrix order. Same-named tracks require identical original metadata. A junction/track absent from one allele remains **null**; a returned numeric zero remains **zero**. If neither allele supplies any overlapping junction, the runner fails clearly instead of manufacturing an empty scientific result.
+
+Junction strands belong to each arc. Original track metadata is strand agnostic in the pinned implementation; absent strand/units remain null, while actual biosample identifiers and names remain attached to each track. The [pinned human metadata](https://github.com/google-deepmind/alphagenome_research/blob/0db53bd4352c66d1e00a049a81da373a066e6670/src/alphagenome_research/model/metadata/OutputMetadataResponse_ORGANISM_HOMO_SAPIENS.textproto) includes `glutamatergic neuron` (`CL:0000679`). Its `Brain_Cortex` GTEx track instead belongs to `frontal cortex` (`UBERON:0001870`); `--biosample 'frontal cortex'` also retains that biosample's separate ENCODE total-RNA track. These biosamples are distinct. Native junction values are not splice-site usage or an experimentally measured alternative-splicing fraction.
 
 ## Files returned
 
 `--output dnm1-analysis.json` writes two new files:
 
-- **`dnm1-analysis.json`** — `kind: "tracks"` dataset accepted directly by the website's JSON import. It preserves each supplied bin, allele values, track identity, units and tissue scope.
+- **`dnm1-analysis.json`** — `kind: "tracks"` for positional output, or `kind: "junctions"` for junction mode, accepted directly by the website's JSON import. It preserves supplied values, track identity, units, tissue scope and the appropriate genomic coordinates.
 - **`dnm1-analysis.source-result.json`** — original cropped matrices and metadata, exact variant/context, annotation hashes, model/package metadata and runtime provenance. The analytical file records the SHA-256 of these exact sidecar bytes.
 
 Keep both files. Existing files are never overwritten; validation completes before writing and a partial write is cleaned up. The operator should retain the complete successful environment and GPU benchmark separately.
 
+In junction mode the raw sidecar retains the selected matrices in their original row/column order, unclipped junction objects, original track records and DataFrame indices, source junction row indices, full returned junction counts, numeric dtype and `uns`. Missing pandas metadata cells become JSON null; finite numerical metadata retains its precision. It includes checksummed pinned source references describing the format. Those raw matrices contain all display-overlapping junctions, not the entire model output outside the display. This selection is explicit in the sidecar; the full model inference still preceded it.
+
+Normalized junction rows group tracks in REF metadata order followed by ALT-only tracks. Within each track, junctions retain REF order followed by ALT-only junctions. The analytical transformation records this join order; the raw sidecar retains each allele's independent original order.
+
 Installed package VCS metadata is recorded when available; absent revisions are explicitly `Not reported`. Expected pins are not promoted to verified revisions. Checkpoint metadata/manifest hashes do not verify every tensor or prove its origin. The verified full input-context hash is distinct from a whole-genome FASTA hash, which remains unavailable. Importing a file does not independently prove that a GPU produced it.
 
-These outputs do not contain Atlas AVI or `SPLICE_JUNCTIONS`. Junction data needs both donor and acceptor coordinates and a separate dataset/plot. Positional splice-site usage cannot stand in for a junction score. No clinical probability, measured splice rate, amino-acid extension or organism phenotype is inferred from these tracks.
+These outputs do not contain Atlas AVI. Positional splice-site usage cannot stand in for a junction score. No clinical probability, measured splice rate, amino-acid extension or organism phenotype is inferred from either output mode.
 
 ## Legacy GPU service converter
 
@@ -87,4 +116,4 @@ npx tsx --test tests/model-result-import.test.ts
 npm run build
 ```
 
-Tests use explicitly synthetic numbers to check format, alignment, exact value preservation, both reference descriptors, mixed-variant rejection, missing metadata, size limits and partial-write behavior. They do not load JAX, access a checkpoint, benchmark GPU memory or validate predictive accuracy. The next scientific check is the actual run in the [GPU execution prompt](../docs/higgsfield-gpu-execute.txt).
+Tests use explicitly synthetic numbers to check format, alignment, exact value preservation, both reference descriptors, mixed-variant rejection, missing metadata, size limits and partial-write behavior. Junction tests additionally cover reordered alleles/tracks, null versus zero, both strands, full crossing endpoints and the actual TypeScript importer. A NumPy/pandas extraction-boundary test runs when those packages are installed; the other tests require only the Python standard library plus the existing TypeScript tooling. They do not load JAX, access a checkpoint, benchmark GPU memory or validate predictive accuracy. The next scientific check is the actual run in the [GPU execution prompt](../docs/higgsfield-gpu-execute.txt).

@@ -2,7 +2,7 @@
 
 ## Current direction: analytical generators
 
-The owner selected data-driven analytical tools using AlphaGenome Atlas as the reference. Generated imagery and the outcome/replay interface are superseded as the product's main workflow. The full goal remains a DNA Engineering Lab, including real model execution and experimental validation; figure generation alone does not complete it.
+The owner selected a researcher-focused analytical workspace using AlphaGenome Atlas as the reference: compare source results, inspect exact values and methods, and iterate on reproducible figures. Generated imagery and the outcome/replay interface are superseded as the product's main workflow. The full goal remains a DNA Engineering Lab, including real model execution and experimental validation; figure generation alone does not complete it.
 
 - [x] Study official Atlas tools, API, data access, scorer semantics and limitations.
 - [x] Retrieve and preserve a real published 524-row AlphaGenome snapshot with exact numbers and source provenance.
@@ -14,7 +14,12 @@ The owner selected data-driven analytical tools using AlphaGenome Atlas as the r
 - [x] Independently verify the two DNM1 reference contexts; bind each imported result to its exact variant, sequence, hash and crop instead of relabeling the earlier variant.
 - [x] Prepare the explicit-variant runner with required annotations, direct analytical export and raw sidecar; verify the Python output through the actual TypeScript importer. These are offline checks, not model execution.
 - [ ] Run the corrected explicit-variant GPU runner and import its actual analysis/raw-result pair. Offline validation does not check this box.
-- [ ] Add a junction dataset and aligned REF/ALT sashimi plots preserving both endpoints, strand, missing values, shared scales and complete source metadata.
+- [x] Add a dedicated junction JSON dataset, paired REF/ALT arc plots and exact-value table. Preserve ascending genomic endpoints on both strands, zero versus missing/null, one shared REF/ALT scale per track and source metadata.
+- [x] Preserve display-overlapping junctions whose endpoints extend outside the viewport; show continuation markers and retain full coordinates in exports. Inference-linked endpoints must remain inside the input interval.
+- [x] Export displayed junction figures as SVG/PNG, all selected scalar rows as CSV and complete datasets/settings as reimportable JSON. CSV keeps nulls and unrounded values; it does not carry the full interval/provenance contract.
+- [x] Verify junction coordinate, identity, scope, metadata and settings validation, plus local and hosted API save/update behavior. Synthetic test fixtures are validation only, not model results.
+- [x] Deploy the junction revision and verify public imports, paired arcs, exact-value tables and exports. Local browser save/reload and both API adapters pass; public checks leave synthetic fixtures unsaved.
+- [ ] Save and reopen the first actual junction model result on the public site after GPU execution.
 - [ ] Connect live Atlas lookup or an authorized AlphaGenome service, with job status and recorded model version.
 - [x] Add typed experimental-measurement JSON imports and a source-backed DNM1 Table S4 plot, preserving printed values and missing uncertainty.
 - [ ] Add prediction-versus-measurement analysis once matching predictions, endpoints and assay contexts are available.

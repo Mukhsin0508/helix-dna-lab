@@ -9,6 +9,7 @@
     "start": "tsx server/index.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "node tests/browser-analyses.mjs",
+    "test:junction-browser": "node tests/browser-junctions.mjs",
     "import:gpu-result": "tsx inference/import-service-result.ts"
   },
   "dependencies": {

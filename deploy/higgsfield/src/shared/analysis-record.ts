@@ -4,7 +4,7 @@ import { analysisDatasetSchema } from './analysis.ts';
 export const ANALYSIS_BODY_LIMIT = 2 * 1024 * 1024;
 export const analysisIdSchema = z.string().uuid();
 export const figureSettingsSchema = z.object({
-  chart: z.enum(['bars', 'heatmap', 'tracks', 'table']),
+  chart: z.enum(['bars', 'heatmap', 'tracks', 'junctions', 'table']),
   title: z.string().trim().min(1).max(160),
   modality: z.string().max(200),
   scorer: z.string().max(1000),
@@ -21,6 +21,10 @@ const analysisInputSchema = z.object({
 }).strict();
 /** Experimental endpoints never acquire model quantiles or genomic coverage through a chart setting. */
 function validateFigureKind(input: z.infer<typeof analysisInputSchema>, context: z.RefinementCtx): void {
+  if (input.dataset.kind === 'junctions') {
+    if (!['junctions', 'table'].includes(input.settings.chart)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['settings', 'chart'], message: 'Splice junctions support junction arcs or a data table.' });
+    if (input.settings.metric !== 'score') context.addIssue({ code: z.ZodIssueCode.custom, path: ['settings', 'metric'], message: 'Junction values are supplied signals, not model quantiles or probabilities.' });
+  } else if (input.settings.chart === 'junctions') context.addIssue({ code: z.ZodIssueCode.custom, path: ['settings', 'chart'], message: 'Junction arcs require a splice-junction dataset with genomic endpoints.' });
   if (input.dataset.kind !== 'measurements') return;
   if (!['bars', 'table'].includes(input.settings.chart)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['settings', 'chart'], message: 'Experimental measurements support a dot plot or data table.' });
   if (input.settings.metric !== 'score') context.addIssue({ code: z.ZodIssueCode.custom, path: ['settings', 'metric'], message: 'Experimental measurements have measured values, not model quantile scores.' });

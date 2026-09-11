@@ -1,4 +1,4 @@
-import { scoreDatasetSchema, analysisDatasetSchema, type AnalysisDataset, type AnalysisProvenance, type AnalysisTrackMetadata, type MeasurementDataset, type MeasurementRow, type ScoreDataset, type ScoreRow, type TrackRow } from '../shared/analysis';
+import { scoreDatasetSchema, analysisDatasetSchema, type AnalysisDataset, type AnalysisProvenance, type AnalysisTrackMetadata, type JunctionDataset, type MeasurementDataset, type MeasurementRow, type ScoreDataset, type ScoreRow, type TrackRow } from '../shared/analysis';
 import type { FigureSettings } from '../shared/analysis-record';
 import publishedRows from '../data/atlas/published-tcell-scores.normalized.json';
 import publishedProvenance from '../data/atlas/published-tcell-scores.provenance.json';
@@ -44,6 +44,7 @@ export function comparisonKey(row: ScoreRow): string {
   return JSON.stringify([row.modality, row.scorer, row.track || '', row.trackStrand || '', row.unit || '', row.signed ?? null]);
 }
 export function defaultSettings(dataset: AnalysisDataset): FigureSettings {
+  if (dataset.kind === 'junctions') return { chart: 'junctions', title: 'Reference and alternate RNA connections', modality: 'SPLICE_JUNCTIONS', scorer: '', track: '', gene: '', metric: 'score', limit: 12, variant: '' };
   if (dataset.kind === 'measurements') return { chart: 'bars', title: dataset.experiment.unit === 'fraction' || dataset.experiment.unit === 'percent' ? 'Measured experimental rate' : 'Measured experimental value', modality: '', scorer: '', track: '', gene: '', metric: 'score', limit: 12, variant: '' };
   const first = dataset.kind === 'scores' ? dataset.rows.find(row => row.modality === 'ATAC') || dataset.rows[0] : undefined;
   return { chart: dataset.kind === 'scores' ? 'bars' : 'tracks', title: dataset.kind === 'scores' ? 'Predicted variant effects' : 'Reference and alternate signal',
@@ -96,7 +97,7 @@ export function csvForRows(rows: ScoreRow[]): string {
   const cell = (value: unknown): string => value === undefined ? '' : `"${String(value).replaceAll('"', '""')}"`;
   return [columns.join(','), ...rows.map(row => columns.map(column => cell(row[column])).join(','))].join('\n');
 }
-export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', filename: string, metadata?: { title: string; source: string; sourceUrl: string; assembly: string; status: string; provenance?: AnalysisProvenance; settings?: FigureSettings; experiment?: MeasurementDataset['experiment']; tracks?: Array<{ chromosome: string; track: string; metadata: AnalysisTrackMetadata | null }> }): Promise<void> {
+export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', filename: string, metadata?: { title: string; source: string; sourceUrl: string; assembly: string; status: string; provenance?: AnalysisProvenance; settings?: FigureSettings; experiment?: MeasurementDataset['experiment']; junctions?: Pick<JunctionDataset, 'interval' | 'variant' | 'rows' | 'trackMetadata'>; tracks?: Array<{ chromosome: string; track: string; metadata: AnalysisTrackMetadata | null }> }): Promise<void> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const view = svg.viewBox.baseVal;
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', String(view.width)); clone.setAttribute('height', String(view.height));
@@ -135,9 +136,9 @@ export function trackGroups(rows: TrackRow[], metadata: AnalysisTrackMetadata[] 
   for (const row of rows) { const key = JSON.stringify([row.chromosome, row.track]); groups.set(key, [...(groups.get(key) || []), row]); }
   return [...groups].map(([key, values]) => ({ key, label: `${values[0].chromosome} · ${values[0].track}`, rows: values.sort((a, b) => a.position - b.position), metadata: byTrack.get(key) }));
 }
-export function signalUnit(metadata?: AnalysisTrackMetadata): string { return metadata?.unit || 'Unit not provided'; }
-export function signalStrand(metadata?: AnalysisTrackMetadata): string { return metadata?.strand === '.' ? 'Unstranded' : metadata?.strand === '+' || metadata?.strand === '-' ? `${metadata.strand} strand` : 'Strand unspecified'; }
-export function signalScope(metadata?: AnalysisTrackMetadata): string {
+export function signalUnit(metadata?: Pick<AnalysisTrackMetadata, 'unit'>): string { return metadata?.unit || 'Unit not provided'; }
+export function signalStrand(metadata?: Pick<AnalysisTrackMetadata, 'strand'>): string { return metadata?.strand === '.' ? 'Unstranded' : metadata?.strand === '+' || metadata?.strand === '-' ? `${metadata.strand} strand` : 'Strand unspecified'; }
+export function signalScope(metadata?: Pick<AnalysisTrackMetadata, 'scope' | 'biosampleName' | 'biosampleId'>): string {
   if (metadata?.scope === 'tissue_agnostic') return 'Tissue-agnostic';
   if (metadata?.scope === 'biosample_specific') return `Biosample-specific · ${metadata.biosampleName || metadata.biosampleId}`;
   return 'Scope unspecified';
