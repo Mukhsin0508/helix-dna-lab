@@ -1,0 +1,346 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Helix AlphaGenome private GPU API",
+    "version": "2.0.0"
+  },
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/metadata": {
+      "get": {
+        "summary": "Metadata",
+        "operationId": "metadata_v1_metadata_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Metadata V1 Metadata Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/predictions": {
+      "post": {
+        "summary": "Submit",
+        "operationId": "submit_v1_predictions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobReceipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/predictions/{jobId}": {
+      "get": {
+        "summary": "Get",
+        "operationId": "get_v1_predictions__jobId__get",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Jobid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JobReceipt": {
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "title": "Jobid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jobId",
+          "status"
+        ],
+        "title": "JobReceipt"
+      },
+      "JobStatus": {
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "title": "Jobid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "expiresAtUnix": {
+            "type": "number",
+            "title": "Expiresatunix"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jobId",
+          "status",
+          "expiresAtUnix"
+        ],
+        "title": "JobStatus"
+      },
+      "PredictionRequest": {
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "title": "Requestid"
+          },
+          "variantId": {
+            "type": "string",
+            "enum": [
+              "chr9:128225994:G>A",
+              "chr9:128226027:G>A"
+            ],
+            "title": "Variantid"
+          },
+          "biosample": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Biosample"
+          },
+          "outputs": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "RNA_SEQ",
+                "SPLICE_SITES",
+                "SPLICE_SITE_USAGE",
+                "SPLICE_JUNCTIONS"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Outputs"
+          },
+          "cropBp": {
+            "type": "integer",
+            "title": "Cropbp",
+            "default": 41
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requestId",
+          "variantId",
+          "biosample",
+          "outputs"
+        ],
+        "title": "PredictionRequest",
+        "description": "One exact supported variant; cropBp is always resolved before persistence."
+      },
+      "ResultEnvelope": {
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "const": 2,
+            "title": "Schemaversion"
+          },
+          "analysis": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Analysis"
+          },
+          "sourceResultJson": {
+            "type": "string",
+            "maxLength": 2097152,
+            "minLength": 1,
+            "title": "Sourceresultjson"
+          },
+          "sourceResultSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sourceresultsha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "analysis",
+          "sourceResultJson",
+          "sourceResultSha256"
+        ],
+        "title": "ResultEnvelope"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ServiceBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "security": [
+    {
+      "ServiceBearer": []
+    }
+  ]
+}

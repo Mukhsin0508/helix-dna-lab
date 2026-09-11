@@ -43,7 +43,9 @@ python inference/run_dnm1.py \
 
 The default exact biosample is `glutamatergic neuron`. Default outputs are `RNA_SEQ`, `SPLICE_SITES` and `SPLICE_SITE_USAGE`; `--outputs RNA_SEQ` explicitly narrows the request. The runner resolves actual ontology identifiers from loaded metadata and checks compatible RNA/usage biosamples. Missing metadata fails rather than substituting another tissue. Splice-site tracks remain tissue independent.
 
-The full model input is 1,048,576 bases. The local extracted context, reference allele and independent 41-base excerpt must match the selected descriptor before model loading. The installed official interval classes must reproduce the verified coordinates. Both species' metadata are retained for checkpoint shape validation while only human reference resources are needed.
+The full model input is 1,048,576 bases. The local extracted context, reference allele and independent 41-base excerpt must match the selected descriptor before every prediction. The installed official interval classes must reproduce the verified coordinates. Both species' metadata are retained for checkpoint shape validation while only human reference resources are needed.
+
+`ModelRunner` loads the actual checkpoint once and can serve serial requests. Every call constructs its own variant and intervals and validates its full reference context; a previous request's variant is never reused. Metadata discovery can inspect all output types, while prediction still requires an exclusive junction or positional mode. `modelLoadSeconds` records the separate one-time load, and `durationSeconds` includes the current request's validation, inference and serialization. The CLI remains compatible and uses this same path.
 
 For positional outputs, default `--crop-bp 41` is applied after full-context inference. The requested window and all returned biological tracks must fit 5000 rows and 2 MiB. Larger explicit crops are allowed only within those limits; oversized results fail rather than being truncated, downsampled or silently losing tracks. REF and ALT metadata, dimensions, coordinates and finite values are checked.
 
@@ -91,6 +93,8 @@ These outputs do not contain Atlas AVI. Positional splice-site usage cannot stan
 
 ## Legacy GPU service converter
 
+The [corrected private service](service/README.md) now reuses this runner and returns the directly importable analysis plus exact raw JSON. It has offline tests and an operator client, but no verified live endpoint or GPU result. The following converter is only for the older attachment format.
+
 The original GPU agent's separate `v0.1.0-preflight` contract returns a raw `PredictionResult`. If a corrected service produces an actual result in that shape:
 
 ```sh
@@ -116,4 +120,4 @@ npx tsx --test tests/model-result-import.test.ts
 npm run build
 ```
 
-Tests use explicitly synthetic numbers to check format, alignment, exact value preservation, both reference descriptors, mixed-variant rejection, missing metadata, size limits and partial-write behavior. Junction tests additionally cover reordered alleles/tracks, null versus zero, both strands, full crossing endpoints and the actual TypeScript importer. A NumPy/pandas extraction-boundary test runs when those packages are installed; the other tests require only the Python standard library plus the existing TypeScript tooling. They do not load JAX, access a checkpoint, benchmark GPU memory or validate predictive accuracy. The next scientific check is the actual run in the [GPU execution prompt](../docs/higgsfield-gpu-execute.txt).
+Tests use explicitly synthetic numbers to check format, alignment, exact value preservation, both reference descriptors, mixed-variant rejection, missing metadata, size limits and partial-write behavior. Junction tests additionally cover reordered alleles/tracks, null versus zero, both strands, full crossing endpoints and the actual TypeScript importer. A NumPy/pandas extraction-boundary test runs when those packages are installed. Nested service tests explicitly skip when their optional API dependencies are absent; install `service/requirements.txt` to run them. Lifecycle tests spy on the model boundary to check one-time loading and repeated per-request validation. They do not load real JAX, access a checkpoint, benchmark GPU memory or validate predictive accuracy. The next scientific check is the actual run in the [GPU execution prompt](../docs/higgsfield-gpu-execute.txt).

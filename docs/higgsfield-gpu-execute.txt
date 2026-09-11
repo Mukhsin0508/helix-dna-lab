@@ -55,12 +55,14 @@ Run repository offline tests before the GPU test, but do not call passing tests 
 These outputs are molecular predictions, not Atlas AVI, experimental measurements, clinical probabilities, vaccine efficacy or a predicted creature. SPLICE_SITE_USAGE is not SPLICE_JUNCTIONS. The selected Atlas Brain Cortex junction and glutamatergic-neuron track filter are different biosamples. Do not conflate them.
 
 FOLLOWING THAT PROOF: PRIVATE SERVICE
-Prepare a bounded Python service around the same validated input/output path, with authenticated HTTPS, one active inference, idempotent request IDs, bounded jobs and expiry. Proposed routes:
+Use the corrected implementation already in inference/service; do not rebuild another queue or use the old attachment's fixed-variant Engine. Read inference/service/README.md for the reviewed controller, current request/result contract, exact configuration names and operator client. It reuses ModelRunner so the checkpoint loads once and each request constructs and validates its own full reference. The controller includes authenticated HTTPS, one active inference, idempotent request IDs, bounded jobs and expiry. Routes:
 GET /v1/health
 GET /v1/metadata
 POST /v1/predictions
 GET /v1/predictions/{jobId}
-Keep it private until readiness and a real authenticated prediction are verified. Public website job integration is not implemented merely by defining these routes. Return the OpenAPI contract, stable HTTPS base URL and private setting names needed by Helix; never print tokens. The website backend will call the service after integration.
+The new request has requestId, variantId, biosample, outputs and cropBp. For example variantId is chr9:128226027:G>A, biosample is glutamatergic neuron, outputs is [RNA_SEQ] and cropBp is 41. The result envelope has schemaVersion 2, a directly importable analysis, sourceResultJson and sourceResultSha256. Preserve those raw UTF-8 bytes exactly. The operator client validates the result against the submitted request, then saves analysis.json and source-result.json. Do not translate it back to the legacy track-only contract.
+
+Keep it private until initialization and a real authenticated prediction are verified. Health ready means the model and metadata initialized, not that a prediction succeeded. Public website job integration is not implemented merely by defining these routes. Return the OpenAPI contract, stable HTTPS base URL and private setting names needed by Helix; never print tokens. Configure the client with HELIX_GPU_API_URL and HELIX_GPU_SERVICE_TOKEN through private settings. The website backend will call the service after account ownership and integration.
 
 The original GPU attachment fixed chr9:128225994:G>A during initialization and echoed the request's variant in its response. Do not relax that schema alone: construct model variant, context, cache key and returned provenance from the same selected descriptor. The normalized runner output is the preferred first delivery. The repository also has a converter for the legacy raw service contract; do not force the new raw sidecar into that shape.
 

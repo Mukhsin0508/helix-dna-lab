@@ -2,6 +2,12 @@
 
 Reviewed 11 September 2026. **Prepared, not deployed.** The delivered bundle contains an API scaffold, inference adapter, candidate dependency locks, deployment templates, and preflight evidence. It does not provide a working GPU service or a model prediction.
 
+### Repository correction after the attachment review
+
+The original attachment remains unchanged. The repository now contains a reviewed adaptation of its controller in [inference/service](../inference/service/README.md), backed by the corrected reusable `ModelRunner`. Both exact DNM1 variants and exclusive junction runs are supported. Completed outputs are checked against the persisted request, the raw JSON hash and a recomputed analytical dataset. The lifecycle changes address null completions, expired queued work, the worker startup/shutdown race and competing controllers. An operator client saves the validated analysis and its exact raw sidecar for website import.
+
+The revised code has been executed in **offline tests with explicitly synthetic fixtures**, including imports through the real website parser. This supersedes the review-only status below for the adapted repository code, not for the untouched original attachment. No actual GPU inference, endpoint, model access or website job integration is established by these changes. See the corrected service guide for its current contract; the remainder of this document records the original delivery and its review.
+
 `DELIVERY-STATUS.json` reports `gpuStarted: false`, `inferencePerformed: false`, `liveBaseUrl: null`, `serviceTokenProvisioned: false`, and `runtimeCredentialConnected: false`. First prediction, prediction plot, and GPU benchmarks are all null. The adapter and candidate inference lock have not been GPU-tested. The README also reports that no weights were downloaded and no GPU rental was started. This review did not inspect a provider account or independently establish its resource state.
 
 ## Current configuration and reported access concern
@@ -28,7 +34,7 @@ The repository now has [independently verified descriptors](../data/reference/RE
 
 The first integration proof is now a real inference result exported as a website-compatible analysis JSON plus its original result sidecar. That does not require a live HTTP service. An authenticated service, its website job adapter and account ownership remain later integration work. The [updated execution prompt](higgsfield-gpu-execute.txt) replaces the old first-run instructions; no GPU run is implied by these repository changes.
 
-Source review also found that the pinned research implementation computes splice-junction intermediates during `predict_variant`, even when only positional tracks are requested. A FASTA-only settings object does not inherit the default splice annotations. The corrected runner supplies explicit GENCODE v46 resources; actual compatibility must still be demonstrated on the GPU. `SPLICE_JUNCTIONS` export and Atlas AVI scoring remain outside this positional-track adapter.
+Source review also found that the pinned research implementation computes splice-junction intermediates during `predict_variant`, even when only positional tracks are requested. A FASTA-only settings object does not inherit the default splice annotations. The corrected runner supplies explicit GENCODE v46 resources; actual compatibility must still be demonstrated on the GPU. The old attachment's positional adapter cannot export junctions. The new repository runner and service support a separate `SPLICE_JUNCTIONS` mode; official Atlas AVI scoring remains outside both paths.
 
 ## Delivered artifacts and integrity
 
