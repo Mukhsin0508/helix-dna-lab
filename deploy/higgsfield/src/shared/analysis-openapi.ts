@@ -1,4 +1,6 @@
 const string = { type: 'string' };
+const nullableString = { type: ['string', 'null'] };
+const hash = { type: 'string', pattern: '^[a-fA-F0-9]{64}$' };
 const record = { $ref: '#/components/schemas/Analysis' };
 const response = { description: 'Persisted dataset and figure settings.', content: { 'application/json': { schema: { type: 'object', required: ['analysis'], properties: { analysis: record } } } } };
 const errors = {
@@ -22,11 +24,25 @@ export const analysisPaths = {
   },
 };
 export const analysisSchemas = {
+  AnalysisInterval: { type: 'object', additionalProperties: false, required: ['chromosome', 'start', 'end', 'coordinateSystem'],
+    description: 'A nonempty interval on a primary human chromosome. End is exclusive.',
+    properties: { chromosome: string, start: { type: 'integer', minimum: 0 }, end: { type: 'integer', minimum: 1 }, coordinateSystem: { const: '0-based-half-open' } } },
+  AnalysisInference: { type: 'object', additionalProperties: false,
+    description: 'Source-reported execution provenance. Importing this record does not authenticate or run the model. Display interval must be inside the input interval, which must contain the exact variant.',
+    required: ['variant', 'inputInterval', 'displayInterval', 'modelRevision', 'clientRevision', 'checkpointRevision', 'referenceVersion', 'referenceSha256', 'transformations'],
+    properties: { variant: string, inputInterval: { $ref: '#/components/schemas/AnalysisInterval' }, displayInterval: { $ref: '#/components/schemas/AnalysisInterval' },
+      modelRevision: string, clientRevision: string, checkpointRevision: string, referenceVersion: string,
+      referenceSha256: { anyOf: [hash, { type: 'null' }], description: 'Whole reference-file hash, or null when unavailable. Not the model input sequence hash.' },
+      inputSequenceSha256: hash, transformations: { type: 'array', maxItems: 50, items: { type: 'string', minLength: 1, maxLength: 1000 } } } },
+  AnalysisArtifact: { type: 'object', additionalProperties: false, required: ['filename', 'sha256'],
+    description: 'Checksum of the original source artifact retained separately by the importer. The API stores this reference, not the source file.',
+    properties: { filename: { type: 'string', minLength: 1, maxLength: 240, description: 'Basename only; no paths or control characters.' }, sha256: hash } },
   AnalysisProvenance: { type: 'object', additionalProperties: false,
     required: ['sourceUrl', 'sourceLabel', 'assembly', 'model', 'context', 'mode'],
     properties: { sourceUrl: { ...string, description: 'HTTP(S) source URL, or empty for user imports.' }, sourceLabel: string,
       assembly: { ...string, description: 'Explicit genome assembly. Variant syntax checks are not reference-allele validation.' }, model: string, context: string,
-      recordedAt: { type: 'string', format: 'date-time' }, mode: { enum: ['published-example', 'imported'] } } },
+      recordedAt: { type: 'string', format: 'date-time' }, mode: { enum: ['published-example', 'imported'] },
+      artifact: { $ref: '#/components/schemas/AnalysisArtifact' }, inference: { $ref: '#/components/schemas/AnalysisInference' } } },
   AnalysisScoreRow: { type: 'object', required: ['variant', 'biosample', 'modality', 'scorer', 'score'],
     properties: { variant: { ...string, description: 'Human primary-chromosome SNV, one-based: chr9:128226027:G>A.' }, biosample: string,
       modality: string, scorer: string, score: { type: 'number', description: 'Finite raw molecular-effect score, in scorer-specific units.' },
@@ -38,10 +54,17 @@ export const analysisSchemas = {
     properties: { chromosome: { ...string, description: 'Primary human chromosome, e.g. chr9.' },
       position: { type: 'integer', minimum: 0, description: 'Zero-based genomic coordinate. Must be unique per chromosome and track.' },
       reference: { type: 'number', description: 'Reference signal value.' }, alternate: { type: 'number', description: 'Alternate signal value.' }, track: string } },
+  AnalysisTrackMetadata: { type: 'object', additionalProperties: false,
+    description: 'Optional metadata for one unique chromosome/track pair present in rows. Declared bins must align and fit the chromosome and recorded display interval. Missing fields are not inferred.',
+    required: ['chromosome', 'track', 'outputType', 'unit', 'strand', 'biosampleId', 'biosampleName', 'scope', 'binSize'],
+    properties: { chromosome: string, track: string, outputType: string, unit: nullableString, strand: { enum: ['+', '-', '.', null] },
+      biosampleId: nullableString, biosampleName: nullableString, scope: { enum: ['biosample_specific', 'tissue_agnostic', 'unspecified'], description: 'Tissue-agnostic tracks must have null biosample identifiers and names.' },
+      binSize: { type: 'integer', minimum: 1 }, sourceName: string, sourceIndex: { type: 'integer', minimum: 0 } } },
   AnalysisDataset: { oneOf: ['scores', 'tracks'].map(kind => ({ type: 'object', additionalProperties: false,
     required: ['schemaVersion', 'id', 'title', 'kind', 'provenance', 'rows'],
     properties: { schemaVersion: { const: 1 }, id: string, title: string, kind: { const: kind },
       provenance: { $ref: '#/components/schemas/AnalysisProvenance' },
+      ...(kind === 'tracks' ? { trackMetadata: { type: 'array', maxItems: 5000, items: { $ref: '#/components/schemas/AnalysisTrackMetadata' } } } : {}),
       rows: { type: 'array', minItems: 1, maxItems: 5000, items: { $ref: `#/components/schemas/Analysis${kind === 'scores' ? 'Score' : 'Track'}Row` } } } })) },
   FigureSettings: { type: 'object', additionalProperties: false,
     required: ['chart', 'title', 'modality', 'scorer', 'track', 'gene', 'metric', 'limit', 'variant'],

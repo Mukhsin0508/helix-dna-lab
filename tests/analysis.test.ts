@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { analysisDatasetSchema, scoreComparisonKey, type AnalysisProvenance, type ScoreDataset } from "../shared/analysis";
+import { analysisDatasetSchema, scoreComparisonKey, type AnalysisProvenance, type ScoreDataset, type TrackDataset } from "../shared/analysis";
 import {
   AnalysisImportError, datasetToCSV, normalizePublishedDataset, parseDatasetJSON,
   parseScoreCSV, parseTrackCSV,
@@ -145,4 +145,114 @@ test("imports enforce 5000 rows and a UTF-8 two-megabyte payload limit", () => {
   assert.throws(() => parseDatasetJSON(`{"large":"${"🙂".repeat(524289)}"}`), /2 MB/);
   const dataset = scoreDataset();
   assert.throws(() => parseDatasetJSON(JSON.stringify({ ...dataset, rows: Array(5001).fill(dataset.rows[0]) })), /5000/);
+});
+
+function inferenceTracks(): TrackDataset {
+  return {
+    schemaVersion: 1, id: "synthetic-contract-test", title: "Synthetic test, not a model prediction", kind: "tracks",
+    provenance: {
+      ...provenance, assembly: "GRCh38.p13", mode: "imported",
+      artifact: { filename: "prediction.json", sha256: "ab".repeat(32) },
+      inference: {
+        variant: "chr9:128225994:G>A",
+        inputInterval: { chromosome: "chr9", start: 127701706, end: 128750282, coordinateSystem: "0-based-half-open" },
+        displayInterval: { chromosome: "chr9", start: 128225973, end: 128226014, coordinateSystem: "0-based-half-open" },
+        modelRevision: "reported-research-revision", clientRevision: "reported-client-revision", checkpointRevision: "reported-checkpoint-revision",
+        referenceVersion: "GRCh38.p13", referenceSha256: null, inputSequenceSha256: "cd".repeat(32),
+        transformations: ['{"operation":"display_crop","start":128225973,"end":128226014}'],
+      },
+    },
+    rows: [
+      { chromosome: "chr9", position: 128225973, reference: 0, alternate: 1.25, track: "RNA_SEQ:0" },
+      { chromosome: "chr9", position: 128225975, reference: 0.1, alternate: 0.2, track: "RNA_SEQ:0" },
+    ],
+    trackMetadata: [{
+      chromosome: "chr9", track: "RNA_SEQ:0", sourceName: "Original RNA track", sourceIndex: 0,
+      outputType: "RNA_SEQ", unit: null, strand: "+", biosampleId: "CL:0000679", biosampleName: "glutamatergic neuron", scope: "biosample_specific", binSize: 2,
+    }],
+  };
+}
+
+test("optional inference and track metadata round-trip in JSON while old datasets remain valid", () => {
+  const dataset = inferenceTracks();
+  assert.deepEqual(parseDatasetJSON(JSON.stringify(dataset)), dataset);
+  assert.equal(dataset.provenance.mode, "imported");
+  assert.equal(dataset.provenance.inference?.referenceSha256, null);
+  assert.equal(analysisDatasetSchema.safeParse(scoreDataset()).success, true);
+  assert.equal(parseTrackCSV(`${trackHeader}\nchr9,0,1,2,signal`, { assembly: "GRCh38" }).trackMetadata, undefined);
+});
+
+test("track metadata keys match rows and prevent duplicate or orphaned declarations", () => {
+  const duplicate = inferenceTracks(); duplicate.trackMetadata!.push({ ...duplicate.trackMetadata![0] });
+  assert.throws(() => parseDatasetJSON(JSON.stringify(duplicate)), /Duplicate metadata/);
+  const orphan = inferenceTracks(); orphan.trackMetadata![0].track = "absent-track";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(orphan)), /no matching data rows/);
+  const wrongChromosome = inferenceTracks(); wrongChromosome.trackMetadata![0].chromosome = "chr8";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(wrongChromosome)), /no matching data rows/);
+  const unique = inferenceTracks();
+  unique.rows.push({ ...unique.rows[0], track: "RNA_SEQ:1" });
+  unique.trackMetadata!.push({ ...unique.trackMetadata![0], track: "RNA_SEQ:1", sourceIndex: 1, strand: "-" });
+  assert.equal(analysisDatasetSchema.safeParse(unique).success, true);
+});
+
+test("bin validation keeps full bin extents, preserves gaps and rejects misalignment", () => {
+  const gaps = inferenceTracks(); gaps.rows[1].position += 2;
+  assert.equal(analysisDatasetSchema.safeParse(gaps).success, true);
+  const misaligned = inferenceTracks(); misaligned.rows[1].position += 1;
+  assert.throws(() => parseDatasetJSON(JSON.stringify(misaligned)), /aligned/);
+  for (const invalid of [0, -1, 1.5]) {
+    const dataset = inferenceTracks(); dataset.trackMetadata![0].binSize = invalid;
+    assert.equal(analysisDatasetSchema.safeParse(dataset).success, false);
+  }
+  const croppedBin = inferenceTracks(); croppedBin.rows[1].position = 128226013;
+  assert.throws(() => parseDatasetJSON(JSON.stringify(croppedBin)), /bin extends beyond.*display/);
+  const chromEnd = inferenceTracks(); delete chromEnd.provenance.inference;
+  chromEnd.rows = [{ ...chromEnd.rows[0], chromosome: "chrM", position: 16568 }];
+  chromEnd.trackMetadata![0].chromosome = "chrM";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(chromEnd)), /bin extends beyond the chromosome/);
+});
+
+test("inference provenance validates exact variant and contained coordinate intervals", () => {
+  const variantOutside = inferenceTracks(); variantOutside.provenance.inference!.variant = "chr3:58394738:A>T";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(variantOutside)), /exact variant/);
+  const displayOutside = inferenceTracks(); displayOutside.provenance.inference!.displayInterval.start = 127701705;
+  assert.throws(() => parseDatasetJSON(JSON.stringify(displayOutside)), /Display interval/);
+  const invalidEnd = inferenceTracks(); invalidEnd.provenance.inference!.displayInterval.end = invalidEnd.provenance.inference!.displayInterval.start;
+  assert.throws(() => parseDatasetJSON(JSON.stringify(invalidEnd)), /exclusive end/);
+  const wrongChrom = inferenceTracks(); wrongChrom.provenance.inference!.displayInterval.chromosome = "chr8";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(wrongChrom)), /same chromosome/);
+  const outsideRow = inferenceTracks(); outsideRow.rows[0].position = 128225972;
+  assert.throws(() => parseDatasetJSON(JSON.stringify(outsideRow)), /outside the recorded display/);
+  const mismatchedScore = scoreDataset(); mismatchedScore.provenance = inferenceTracks().provenance;
+  assert.throws(() => parseDatasetJSON(JSON.stringify(mismatchedScore)), /Score row differs/);
+});
+
+test("source artifact and revision metadata reject missing or malformed evidence fields", () => {
+  for (const filename of ["../prediction.json", "folder/prediction.json", "folder\\prediction.json", "..", ".", "bad\u0000name"]) {
+    const dataset = inferenceTracks(); dataset.provenance.artifact!.filename = filename;
+    assert.throws(() => parseDatasetJSON(JSON.stringify(dataset)), /basename/);
+  }
+  const invalidHash = inferenceTracks(); invalidHash.provenance.artifact!.sha256 = "not-a-hash";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(invalidHash)), /SHA-256/);
+  const noRevision = inferenceTracks(); noRevision.provenance.inference!.modelRevision = "";
+  assert.equal(analysisDatasetSchema.safeParse(noRevision).success, false);
+  const invalidContextHash = inferenceTracks(); invalidContextHash.provenance.inference!.inputSequenceSha256 = "";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(invalidContextHash)), /SHA-256/);
+  const fabricatedFlag = inferenceTracks();
+  assert.throws(() => parseDatasetJSON(JSON.stringify({ ...fabricatedFlag, provenance: { ...fabricatedFlag.provenance, inference: { ...fabricatedFlag.provenance.inference, executionVerified: true } } })), /Unrecognized key/);
+});
+
+test("tissue-agnostic metadata cannot masquerade as a named-cell prediction", () => {
+  const dataset = inferenceTracks(); dataset.trackMetadata![0].scope = "tissue_agnostic";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(dataset)), /must not be assigned a biosample/);
+  dataset.trackMetadata![0].biosampleId = null; dataset.trackMetadata![0].biosampleName = null;
+  assert.equal(analysisDatasetSchema.safeParse(dataset).success, true);
+  dataset.trackMetadata![0].scope = "biosample_specific";
+  assert.throws(() => parseDatasetJSON(JSON.stringify(dataset)), /require a biosample/);
+});
+
+test("unknown model strand remains null rather than becoming unstranded", () => {
+  const dataset = inferenceTracks(); dataset.trackMetadata![0].strand = null;
+  const parsed = parseDatasetJSON(JSON.stringify(dataset));
+  assert.equal(parsed.kind === "tracks" && parsed.trackMetadata![0].strand, null);
 });

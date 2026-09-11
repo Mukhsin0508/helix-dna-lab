@@ -7,7 +7,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import test from 'node:test';
 import { createApp } from '../server/app.ts';
 import { AnalysisStore } from '../server/analyses.ts';
-import type { ScoreDataset } from '../shared/analysis.ts';
+import type { ScoreDataset, TrackDataset } from '../shared/analysis.ts';
 import { ANALYSIS_BODY_LIMIT, type AnalysisInput, type AnalysisRecord } from '../shared/analysis-record.ts';
 
 const migration = readFileSync(new URL('../deploy/higgsfield/migrations/0002_helix.sql', import.meta.url), 'utf8');
@@ -50,6 +50,32 @@ type Call = (
   headers?: Record<string, string>, raw?: boolean,
 ) => Promise<Response>;
 interface Harness { call: Call; close(): Promise<void> }
+
+for (const kind of ['local', 'cloud'] as const) {
+  test(`${kind}: source-reported track provenance survives saving and retrieval without inventing unknown units`, async () => {
+    const store = await harness(kind);
+    try {
+      const dataset: TrackDataset = {
+        schemaVersion: 1, id: 'synthetic-metadata-test', kind: 'tracks', title: 'Synthetic API test only',
+        provenance: { sourceUrl: '', sourceLabel: 'Synthetic unit test', assembly: 'GRCh38.p13', model: 'Test only', context: 'Not a model run', mode: 'imported',
+          artifact: { filename: 'source-result.json', sha256: 'a'.repeat(64) },
+          inference: { variant: 'chr9:128225994:G>A', inputInterval: { chromosome: 'chr9', start: 127701706, end: 128750282, coordinateSystem: '0-based-half-open' },
+            displayInterval: { chromosome: 'chr9', start: 128225973, end: 128226014, coordinateSystem: '0-based-half-open' },
+            modelRevision: 'test-revision', clientRevision: 'test-client', checkpointRevision: 'test-checkpoint', referenceVersion: 'GRCh38.p13', referenceSha256: null,
+            inputSequenceSha256: 'b'.repeat(64), transformations: ['Synthetic test fixture, no inference'] } },
+        rows: [{ chromosome: 'chr9', position: 128225973, reference: 0.00000123456789, alternate: 0, track: 'splice-test' }],
+        trackMetadata: [{ chromosome: 'chr9', track: 'splice-test', outputType: 'SPLICE_SITES', unit: null, strand: null,
+          biosampleId: null, biosampleName: null, scope: 'tissue_agnostic', binSize: 1, sourceName: 'Test', sourceIndex: 0 }],
+      };
+      const created = await analysisOf(await store.call('/api/analyses', 'POST', { dataset, settings: { ...input().settings, chart: 'tracks', gene: '', track: '' } }), 201);
+      const reloaded = await analysisOf(await store.call(`/api/analyses/${created.id}`));
+      assert.deepEqual(reloaded.dataset, dataset);
+      const specification = await (await store.call('/api/openapi.json')).json() as { components: { schemas: Record<string, { properties?: Record<string, unknown> }> } };
+      assert.ok(specification.components.schemas.AnalysisProvenance.properties?.inference);
+      assert.ok(specification.components.schemas.AnalysisTrackMetadata.properties?.binSize);
+    } finally { await store.close(); }
+  });
+}
 
 async function harness(kind: 'local' | 'cloud', path = ':memory:'): Promise<Harness> {
   if (kind === 'local') {

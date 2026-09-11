@@ -1,8 +1,24 @@
 # GPU delivery status
 
-Reviewed 10 September 2026. **Prepared, not deployed.** The delivered bundle contains an API scaffold, inference adapter, candidate dependency locks, deployment templates, and preflight evidence. It does not provide a working GPU service or a model prediction.
+Reviewed 11 September 2026. **Prepared, not deployed.** The delivered bundle contains an API scaffold, inference adapter, candidate dependency locks, deployment templates, and preflight evidence. It does not provide a working GPU service or a model prediction.
 
 `DELIVERY-STATUS.json` reports `gpuStarted: false`, `inferencePerformed: false`, `liveBaseUrl: null`, `serviceTokenProvisioned: false`, and `runtimeCredentialConnected: false`. First prediction, prediction plot, and GPU benchmarks are all null. The adapter and candidate inference lock have not been GPU-tested. The README also reports that no weights were downloaded and no GPU rental was started. This review did not inspect a provider account or independently establish its resource state.
+
+## Current configuration and reported access concern
+
+On 11 September 2026, a Chrome review of the GPU-development task still showed the prepared bundle, no started GPU, no endpoint and no connected private checkpoint credential. The public website project's secrets-list tool returned `names: []`; no configured secret names were exposed for that project. These are observations of the inspected task and website configuration, not proof of the resource or credential state of every external account.
+
+The bundle separately records the user's reported accepted model access and personal noncommercial use, while raising an eligibility concern about an unaffiliated personal project. That concern is the bundle author's interpretation of the model terms; this review does not independently resolve or endorse that legal interpretation. A reported eligibility concern and the verified absence of connected runtime configuration are different issues. Regardless of the eventual eligibility determination, this delivery currently supplies no live HTTPS base URL, provisioned service token, connected checkpoint credential or loaded-checkpoint result that Helix can use.
+
+The bundle also reports a managed-downloader restriction and unverified stable ingress/lifecycle support. Those are reported constraints of the inspected route, not a determination that every potential host is unsuitable. No terms were accepted, credentials entered, model calls made or external messages sent during this documentation update.
+
+## Atlas access and the requested DNM1 variant
+
+The independent Atlas recheck on 11 September 2026 found two separate blockers: the [public AVI ZIP](https://deepmind.google.com/science/alphagenome/_/download/atlas/avi_scores_snvs_tabix.zip) returned HTTP 500 for HEAD and a 256-byte range request, and an anonymous request to the official Atlas metadata service returned gRPC `PERMISSION_DENIED`, requiring established caller identity. Exact times and request scope are recorded in [ANALYTICAL_LAB.md](ANALYTICAL_LAB.md#access-recheck-2026-09-11-asiaalmaty). Atlas lookup uses hosted precomputed data and needs no local GPU; no live Atlas score was obtained.
+
+The [official Atlas paper, Table S4](https://storage.googleapis.com/deepmind-media/DeepMind.com/Blog/alphagenome-atlas-a-predictive-map-of-every-possible-dna-letter-change-in-the-human-genome/alphagenome-atlas.pdf) does report an experimental alternative 3′ splice-site selection rate of **0.94** for the requested **chr9:128226027:G>A**. This is a literature measurement, not AVI, a model-score row or a new inference result. The bundle below instead targets **chr9:128225994:G>A**. That nearby variant is the one assigned AVI PHRED **24.7** and **69% splicing attribution** in the paper's main text. The variants are 33 bases apart and their results must remain separate.
+
+The paper's Code Availability section states that AVI model source code and weights will be provided upon final publication. Deploying the base AlphaGenome checkpoint does not by itself supply official AVI scoring.
 
 ## Delivered artifacts and integrity
 
@@ -67,7 +83,7 @@ The recorded research revision is `0db53bd4352c66d1e00a049a81da373a066e6670`; cl
 
 ## What is still needed to connect Helix
 
-1. Resolve the access, host-authorization, and downloader prerequisites recorded by the delivery. This review makes no eligibility or licensing determination. Establish private credential injection and an approved GPU host with stable authenticated HTTPS ingress and a verified shutdown/resume mechanism.
+1. Establish the actual model-access and host prerequisites for the chosen deployment route. The bundle's eligibility concern is reported separately above; this review makes no eligibility or licensing determination. Connect private credential injection and an approved GPU host with stable authenticated HTTPS ingress and a verified shutdown/resume mechanism.
 2. Stage authorized checkpoint files, verify their manifest, install and validate the candidate environment on the actual GPU, and record the successful dependency versions. The README proposes one H100 80 GB; no hardware suitability or performance has been measured in this delivery.
 3. Load the real checkpoint, verify its available biosample/track metadata, pass real full-context smoke runs, and retain cold/warm timings and complete output provenance. The service must become ready only after those checks succeed.
 4. From the Helix backend's calling network, submit the fixed variant, poll to completion, and inspect the actual JSON, track alignment, numeric values, and first plot. Verify authentication and lifecycle behavior on that live endpoint.

@@ -7,6 +7,7 @@ export const chromosomeSchema = z.string().regex(/^chr(?:[1-9]|1\d|2[0-2]|X|Y|M)
 const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum);
 const strandSchema = z.enum(["+", "-", "."]);
 const safeIntegerSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+const sha256Schema = z.string().regex(/^[a-fA-F0-9]{64}$/, "Expected a 64-character hexadecimal SHA-256 hash.");
 
 /** Human SNV identifiers use one-based positions. This checks syntax, not reference alleles. */
 export const variantSchema = z.string().regex(/^chr(?:[1-9]|1\d|2[0-2]|X|Y|M):[1-9]\d*:[ACGT]>[ACGT]$/, "Use a one-based SNV identifier such as chr9:128226027:G>A.")
@@ -16,6 +17,34 @@ export const variantSchema = z.string().regex(/^chr(?:[1-9]|1\d|2[0-2]|X|Y|M):[1
     if (!Number.isSafeInteger(Number(match[1]))) context.addIssue({ code: z.ZodIssueCode.custom, message: "Variant position must be a safe integer." });
     if (match[2] === match[3]) context.addIssue({ code: z.ZodIssueCode.custom, message: "Reference and alternate alleles must differ." });
   });
+
+export const analysisIntervalSchema = z.object({
+  chromosome: chromosomeSchema,
+  start: safeIntegerSchema,
+  end: safeIntegerSchema,
+  coordinateSystem: z.literal("0-based-half-open"),
+}).strict().refine(interval => interval.end > interval.start, { path: ["end"], message: "An interval's exclusive end must be greater than its start." });
+
+/** These identifiers are source-reported; importing a result does not verify its execution. */
+export const analysisInferenceSchema = z.object({
+  variant: variantSchema,
+  inputInterval: analysisIntervalSchema,
+  displayInterval: analysisIntervalSchema,
+  modelRevision: boundedText(200),
+  clientRevision: boundedText(200),
+  checkpointRevision: boundedText(200),
+  referenceVersion: boundedText(200),
+  // Hash of the reference genome file, when supplied. A context hash belongs below.
+  referenceSha256: sha256Schema.nullable(),
+  inputSequenceSha256: sha256Schema.optional(),
+  transformations: z.array(boundedText(1_000)).max(50),
+}).strict().superRefine((inference, context) => {
+  const { inputInterval: input, displayInterval: display } = inference;
+  if (display.chromosome !== input.chromosome || display.start < input.start || display.end > input.end) context.addIssue({ code: z.ZodIssueCode.custom, path: ["displayInterval"], message: "Display interval must be contained in the model input interval on the same chromosome." });
+  const [chromosome, position] = inference.variant.split(":");
+  const zeroBased = Number(position) - 1;
+  if (chromosome !== input.chromosome || zeroBased < input.start || zeroBased >= input.end) context.addIssue({ code: z.ZodIssueCode.custom, path: ["variant"], message: "The exact variant must be contained in the model input interval." });
+});
 
 export const analysisProvenanceSchema = z.object({
   sourceUrl: z.string().max(2_048).refine(value => {
@@ -31,6 +60,11 @@ export const analysisProvenanceSchema = z.object({
   context: boundedText(500),
   recordedAt: z.string().datetime({ offset: true }).optional(),
   mode: z.enum(["published-example", "imported"]),
+  artifact: z.object({
+    filename: z.string().min(1).max(240).refine(value => value !== "." && value !== ".." && !/[\\/\x00-\x1f\x7f]/.test(value), "Artifact filename must be a basename without paths or control characters."),
+    sha256: sha256Schema,
+  }).strict().optional(),
+  inference: analysisInferenceSchema.optional(),
 }).strict();
 
 export const scoreRowSchema = z.object({
@@ -63,6 +97,24 @@ export const trackRowSchema = z.object({
   track: boundedText(500),
 }).strict();
 
+/** Optional original model metadata for each chromosome / displayed track key. */
+export const analysisTrackMetadataSchema = z.object({
+  chromosome: chromosomeSchema,
+  track: boundedText(500),
+  outputType: boundedText(100),
+  unit: boundedText(500).nullable(),
+  strand: strandSchema.nullable(),
+  biosampleId: boundedText(200).nullable(),
+  biosampleName: boundedText(300).nullable(),
+  scope: z.enum(["biosample_specific", "tissue_agnostic", "unspecified"]),
+  binSize: safeIntegerSchema.refine(value => value > 0, "Bin size must be a positive integer."),
+  sourceName: boundedText(500).optional(),
+  sourceIndex: safeIntegerSchema.optional(),
+}).strict().superRefine((metadata, context) => {
+  if (metadata.scope === "tissue_agnostic" && (metadata.biosampleId !== null || metadata.biosampleName !== null)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: "Tissue-agnostic tracks must not be assigned a biosample." });
+  if (metadata.scope === "biosample_specific" && metadata.biosampleId === null && metadata.biosampleName === null) context.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: "Biosample-specific tracks require a biosample name or identifier." });
+});
+
 const datasetBase = {
   schemaVersion: z.literal(1),
   id: boundedText(200),
@@ -78,6 +130,7 @@ export const trackDatasetSchema = z.object({
   ...datasetBase,
   kind: z.literal("tracks"),
   rows: z.array(trackRowSchema).min(1).max(ANALYSIS_ROW_LIMIT),
+  trackMetadata: z.array(analysisTrackMetadataSchema).min(1).max(ANALYSIS_ROW_LIMIT).optional(),
 }).strict();
 
 // UCSC primary hg38 chromosome sizes, verified 2026-09-11:
@@ -94,19 +147,45 @@ const human38Lengths: Readonly<Record<string, number>> = {
 
 export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetSchema, trackDatasetSchema])
   .superRefine((dataset, context) => {
-    const hg38 = /^(?:GRCh38(?:\/hg38)?|hg38)$/i.test(dataset.provenance.assembly);
+    const hg38 = /^(?:GRCh38(?:\.p\d+)?(?:\/hg38)?|hg38)$/i.test(dataset.provenance.assembly);
     const seen = new Set<string>();
+    const inference = dataset.provenance.inference;
+    if (inference && hg38) {
+      for (const intervalName of ["inputInterval", "displayInterval"] as const) {
+        const interval = inference[intervalName];
+        if (interval.end > human38Lengths[interval.chromosome]) context.addIssue({ code: z.ZodIssueCode.custom, path: ["provenance", "inference", intervalName, "end"], message: "Interval exceeds this GRCh38 chromosome's length." });
+      }
+    }
     dataset.rows.forEach((row, index) => {
       if (dataset.kind === "scores" && "variant" in row) {
         const [chromosome, position] = row.variant.split(":");
         if (hg38 && Number(position) > human38Lengths[chromosome]) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "variant"], message: "Variant position exceeds this GRCh38 chromosome's length." });
+        if (inference && row.variant !== inference.variant) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "variant"], message: "Score row differs from the single variant recorded in inference provenance." });
       } else if ("position" in row) {
         if (hg38 && row.position >= human38Lengths[row.chromosome]) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "position"], message: "Zero-based track position exceeds this GRCh38 chromosome's length." });
         const key = JSON.stringify([row.chromosome, row.position, row.track]);
         if (seen.has(key)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index], message: "Duplicate chromosome, position and track; provide one value per coordinate." });
         seen.add(key);
+        if (inference && (row.chromosome !== inference.displayInterval.chromosome || row.position < inference.displayInterval.start || row.position >= inference.displayInterval.end)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "position"], message: "Track row lies outside the recorded display interval." });
       }
     });
+    if (dataset.kind === "tracks" && dataset.trackMetadata) {
+      const metadataPairs = new Set<string>();
+      dataset.trackMetadata.forEach((metadata, metadataIndex) => {
+        const pair = JSON.stringify([metadata.chromosome, metadata.track]);
+        if (metadataPairs.has(pair)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["trackMetadata", metadataIndex], message: "Duplicate metadata for a chromosome and track pair." });
+        metadataPairs.add(pair);
+        const rows = dataset.rows.filter(row => row.chromosome === metadata.chromosome && row.track === metadata.track);
+        if (!rows.length) context.addIssue({ code: z.ZodIssueCode.custom, path: ["trackMetadata", metadataIndex], message: "Declared track metadata has no matching data rows." });
+        const firstPosition = rows[0]?.position;
+        for (const row of rows) {
+          if ((row.position - firstPosition) % metadata.binSize !== 0) context.addIssue({ code: z.ZodIssueCode.custom, path: ["trackMetadata", metadataIndex, "binSize"], message: "Track positions are not aligned to the declared bin size." });
+          const binEnd = row.position + metadata.binSize;
+          if (!Number.isSafeInteger(binEnd) || (hg38 && binEnd > human38Lengths[row.chromosome])) context.addIssue({ code: z.ZodIssueCode.custom, path: ["trackMetadata", metadataIndex, "binSize"], message: "A track bin extends beyond the chromosome or valid integer range." });
+          if (inference && binEnd > inference.displayInterval.end) context.addIssue({ code: z.ZodIssueCode.custom, path: ["trackMetadata", metadataIndex, "binSize"], message: "A track bin extends beyond the recorded display interval." });
+        }
+      });
+    }
     if (dataset.provenance.mode === "published-example" && !dataset.provenance.sourceUrl) context.addIssue({ code: z.ZodIssueCode.custom, path: ["provenance", "sourceUrl"], message: "Published examples require a source URL." });
   });
 
@@ -116,6 +195,9 @@ export type TrackDataset = z.infer<typeof trackDatasetSchema>;
 export type ScoreRow = z.infer<typeof scoreRowSchema>;
 export type TrackRow = z.infer<typeof trackRowSchema>;
 export type AnalysisProvenance = z.infer<typeof analysisProvenanceSchema>;
+export type AnalysisTrackMetadata = z.infer<typeof analysisTrackMetadataSchema>;
+export type AnalysisInference = z.infer<typeof analysisInferenceSchema>;
+export type AnalysisInterval = z.infer<typeof analysisIntervalSchema>;
 
 /** A conservative comparison group. Never combine modalities or unrelated scorer units. */
 export function scoreComparisonKey(row: ScoreRow): string {

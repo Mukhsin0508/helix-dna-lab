@@ -58,3 +58,29 @@ python run_dnm1.py --help
 ```
 
 Five dependency-free tests cover reference mismatch, bin-aligned cropping, exact biosample lookup, numeric serialization, and rejection of invalid values/shapes. CLI help and Python compilation pass. These checks do not load JAX, check GPU memory, or prove full inference compatibility.
+
+## Import a completed GPU service result into the analytical lab
+
+The separate GPU agent's delivered `v0.1.0-preflight` service writes raw `first-prediction.json` and `warm-prediction.json` files after successful inference. Once one of those **actual result files** is available, run this command from the repository root:
+
+```sh
+npm run import:gpu-result -- \
+  --input /absolute/path/to/first-prediction.json \
+  --output-dir /absolute/path/to/new-analysis-bundle
+```
+
+The output directory must not exist, and its parent must exist. The converter validates the entire result before creating the directory and cleans up a partially written bundle if a write fails. `npm run import:gpu-result -- --help` requires no checkpoint or scientific dependencies.
+
+The bundle contains:
+
+- `source-result.json`: a byte-for-byte copy of the input, including original metadata and all source evidence.
+- `analysis.json`: an analytical dataset accepted by the lab's JSON import, with all 41 supplied bins per track and the source artifact's SHA-256.
+- `README.md`: interpretation, provenance and format limitations.
+
+The converter checks the fixed GRCh38 **chr9:128225994:G>A** variant, verified 1,048,576-base context and 41-base reference crop, track alignment, tissue scope, original metadata, numerical finiteness, and row/payload limits. It keeps equal-name tracks on different strands separate, preserves unknown strand/units as null, and retains `SPLICE_SITES` as tissue agnostic. It does not smooth, normalize, derive scores, fabricate missing bins, upload files or run inference. An oversized result is rejected rather than truncated.
+
+Model/client/checkpoint revisions and reference context hashes remain **source-reported**. An import and a matching file checksum do not independently prove GPU execution or checkpoint identity. The whole-reference FASTA hash is unavailable in this service contract, so it remains null; the input-context hash is retained separately. Keep the raw artifact beside the analytical JSON: it preserves metadata that charts do not display. CSV alone is not a complete provenance-bearing export.
+
+This bridge supports the delivered service's **raw `PredictionResult`**, not its queued/completed job envelope, the standalone `run_dnm1.py` matrix format, Atlas scores, or the newer **chr9:128226027:G>A** variant in the Atlas link. Those require separate adapters; one variant's results cannot stand in for another's.
+
+Run the converter tests with `npx tsx --test tests/model-result-import.test.ts`. All numerical fixtures in those tests are synthetic QA inputs, not bundled model predictions. A completed live model output is still required before this bridge can show a real new prediction in the lab.

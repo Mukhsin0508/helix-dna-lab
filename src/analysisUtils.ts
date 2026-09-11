@@ -1,4 +1,4 @@
-import { scoreDatasetSchema, type AnalysisDataset, type AnalysisProvenance, type ScoreDataset, type ScoreRow, type TrackRow } from '../shared/analysis';
+import { scoreDatasetSchema, type AnalysisDataset, type AnalysisProvenance, type AnalysisTrackMetadata, type ScoreDataset, type ScoreRow, type TrackRow } from '../shared/analysis';
 import type { FigureSettings } from '../shared/analysis-record';
 import publishedRows from '../data/atlas/published-tcell-scores.normalized.json';
 import publishedProvenance from '../data/atlas/published-tcell-scores.provenance.json';
@@ -71,7 +71,7 @@ export function csvForRows(rows: ScoreRow[]): string {
   const cell = (value: unknown): string => value === undefined ? '' : `"${String(value).replaceAll('"', '""')}"`;
   return [columns.join(','), ...rows.map(row => columns.map(column => cell(row[column])).join(','))].join('\n');
 }
-export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', filename: string, metadata?: { title: string; source: string; sourceUrl: string; assembly: string; status: string }): Promise<void> {
+export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', filename: string, metadata?: { title: string; source: string; sourceUrl: string; assembly: string; status: string; provenance?: AnalysisProvenance; settings?: FigureSettings; tracks?: Array<{ chromosome: string; track: string; metadata: AnalysisTrackMetadata | null }> }): Promise<void> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const view = svg.viewBox.baseVal;
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', String(view.width)); clone.setAttribute('height', String(view.height));
@@ -104,8 +104,27 @@ export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', file
 export function importProvenance(assembly: string, sourceUrl: string, sourceLabel: string): AnalysisProvenance {
   return { assembly, sourceUrl, sourceLabel: sourceLabel || 'User import', model: 'Not supplied', context: 'User-supplied data. Not independently verified.', mode: 'imported' };
 }
-export function trackGroups(rows: TrackRow[]): Array<{ key: string; label: string; rows: TrackRow[] }> {
+export function trackGroups(rows: TrackRow[], metadata: AnalysisTrackMetadata[] = []): Array<{ key: string; label: string; rows: TrackRow[]; metadata?: AnalysisTrackMetadata }> {
   const groups = new Map<string, TrackRow[]>();
+  const byTrack = new Map(metadata.map(item => [JSON.stringify([item.chromosome, item.track]), item]));
   for (const row of rows) { const key = JSON.stringify([row.chromosome, row.track]); groups.set(key, [...(groups.get(key) || []), row]); }
-  return [...groups].map(([key, values]) => ({ key, label: `${values[0].chromosome} · ${values[0].track}`, rows: values.sort((a, b) => a.position - b.position) }));
+  return [...groups].map(([key, values]) => ({ key, label: `${values[0].chromosome} · ${values[0].track}`, rows: values.sort((a, b) => a.position - b.position), metadata: byTrack.get(key) }));
+}
+export function signalUnit(metadata?: AnalysisTrackMetadata): string { return metadata?.unit || 'Unit not provided'; }
+export function signalStrand(metadata?: AnalysisTrackMetadata): string { return metadata?.strand === '.' ? 'Unstranded' : metadata?.strand === '+' || metadata?.strand === '-' ? `${metadata.strand} strand` : 'Strand unspecified'; }
+export function signalScope(metadata?: AnalysisTrackMetadata): string {
+  if (metadata?.scope === 'tissue_agnostic') return 'Tissue-agnostic';
+  if (metadata?.scope === 'biosample_specific') return `Biosample-specific · ${metadata.biosampleName || metadata.biosampleId}`;
+  return 'Scope unspecified';
+}
+export function signalMetadataLabel(metadata?: AnalysisTrackMetadata): string {
+  return `${signalStrand(metadata)} · ${signalScope(metadata)} · ${metadata ? `${metadata.binSize} bp bins` : 'Bin size unspecified'}`;
+}
+export function inferenceSourceStatus(provenance: AnalysisProvenance): string {
+  if (provenance.mode === 'published-example') return 'Published model output snapshot · no live inference performed';
+  return provenance.inference ? 'Imported model output · execution reported by source' : 'Supplied data · no inference performed';
+}
+/** Draw declared bins as constant segments, starting a new path at missing bins. */
+export function binnedSignalPath(rows: TrackRow[], kind: 'reference' | 'alternate', binSize: number, x: (position: number) => number, y: (value: number) => number): string {
+  return rows.map((row, index) => `${index && rows[index - 1].position + binSize === row.position ? 'L' : 'M'} ${x(row.position)} ${y(row[kind])} H ${x(row.position + binSize)}`).join(' ');
 }

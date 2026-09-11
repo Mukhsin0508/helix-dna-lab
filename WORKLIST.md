@@ -10,6 +10,7 @@ The owner selected data-driven analytical tools using AlphaGenome Atlas as the r
 - [x] Implement dataset + figure persistence with revision checks in SQLite and D1.
 - [x] Verify analytical figure rendering, filtering, imports and SVG/PNG/CSV/recipe exports in the browser.
 - [x] Deploy and verify this analytical version publicly, including saved figure settings restored from D1.
+- [x] Add a metadata-preserving GPU service-result import bridge with a checksummed raw artifact, exact REF/ALT bins, tissue scope and source-reported inference provenance. A completed real service result is still required; this bridge does not execute or connect a model.
 - [ ] Connect live Atlas lookup or an authorized AlphaGenome service, with job status and recorded model version.
 - [ ] Add compatible experimental-result imports and prediction-versus-measurement analysis.
 - [ ] Validate utility with a research workflow and held-out measurements.
