@@ -1,88 +1,64 @@
-Carry out the setup below now. This is an implementation request, not a request to review or summarize the handoff. Perform the prerequisite checks as part of execution and continue through the authorized steps without asking me to choose setup versus review again.
+Carry out this setup as an implementation task. Complete independent prerequisites now, then execute inference when authorized checkpoint access and the GPU are available.
 
-This is my personal, non-commercial research and educational project. Higgsfield supplies the compute; this is not a company-operated commercial product. Use the official non-commercial research-model access route, subject to its terms. Do not purchase a commercial Google Cloud subscription for this setup.
+This is my personal, non-commercial research project. Use Higgsfield compute and official AlphaGenome research weights. Do not purchase a commercial Google Cloud subscription. Preserve the brain viewer and Helix website.
 
-Build a private, self-hosted AlphaGenome inference service for my Helix DNA Lab. Use our Higgsfield GPU, not Google's hosted prediction API. Once the model-access prerequisites below are satisfied, provision one H100 GPU, install the model, run the verified reference-versus-alternate example, and expose the result through a small authenticated HTTPS API. If a specific missing account permission or model-terms acceptance prevents the next step, identify that exact blocker and complete independent setup work that does not depend on it.
+First deliver one real model result that the analytical lab can import. Then prepare the private live service. Do not substitute synthetic values or a published measurement for actual inference.
 
-## Official model and weights
+SOURCE AND ACCESS
+- Our repository: https://github.com/Mukhsin0508/helix-dna-lab (private personal repository; use authorized access).
+- Implementation: https://github.com/google-deepmind/alphagenome_research at 0db53bd4352c66d1e00a049a81da373a066e6670.
+- Client: https://github.com/google-deepmind/alphagenome at aa6fc8f6faadcb8c910fa2b85b57386fbd5c7b5d.
+- Official checkpoint: https://huggingface.co/google/alphagenome-all-folds at a8f293a76ee73d5b57f3bf2ae146510589fcf187.
+- Model terms: https://deepmind.google.com/science/alphagenome/model-terms.
+Check already-granted access. If an account action or terms acceptance is missing, report that exact action and official URL. Do not accept terms for me, bypass access controls or use unofficial weights. Do not start a paid GPU while waiting. Keep credentials in private platform settings, out of prompts, logs and delivered files.
 
-- Model implementation: https://github.com/google-deepmind/alphagenome_research
-- Client/data classes and output formats: https://github.com/google-deepmind/alphagenome
-- Pretrained all-folds checkpoint: https://huggingface.co/google/alphagenome-all-folds
-- Alternative weights: https://www.kaggle.com/models/google/alphagenome (`google/alphagenome/jax/all_folds`).
-- Official human reference FASTA: https://storage.googleapis.com/alphagenome/reference/gencode/hg38/GRCh38.p13.genome.fa and its `.fai` index.
-- Model terms: https://deepmind.google.com/science/alphagenome/model-terms
-- GPU installation guidance: https://docs.jax.dev/en/latest/installation.html#nvidia-gpu
+ENVIRONMENT
+Use one H100 80 GB for the initial full-context smoke test, not a cluster. This is an initial configuration, not a measured minimum. Use Linux and Python 3.12. Inspect driver, RAM and free disk, then follow https://docs.jax.dev/en/latest/installation.html#nvidia-gpu. Choose compatible CUDA/JAX wheels and verify an NVIDIA GPU appears in jax.devices(). Preserve the successful dependency lock and actual installed Git revisions; expected pins are not verification.
 
-The software license and model-weight terms are separate. The released weights require account access and acceptance of non-commercial model terms. Check whether access has already been granted for my personal research use. Do not accept terms on my behalf, bypass a gated download, or obtain weights from unofficial mirrors. If access is missing, give me the official account page and the exact missing action. Do not start a paid GPU while waiting for access.
+Stage the authorized Orbax checkpoint root, including its manifest and shards. Obtain these official public reference files and preserve their download provenance:
+https://storage.googleapis.com/alphagenome/reference/gencode/hg38/GRCh38.p13.genome.fa
+https://storage.googleapis.com/alphagenome/reference/gencode/hg38/GRCh38.p13.genome.fa.fai
+https://storage.googleapis.com/alphagenome/reference/gencode/hg38/gencode.v46.annotation.gtf.gz.feather
+https://storage.googleapis.com/alphagenome/reference/gencode/hg38/gencode.v46.splice_sites_starts.feather
+https://storage.googleapis.com/alphagenome/reference/gencode/hg38/gencode.v46.splice_sites_ends.feather
 
-## GPU and environment
+Use the updated repository runner. Its required annotation paths address a source-level compatibility risk: the pinned predict_variant computes junction intermediates even for positional output requests. A custom FASTA-only OrganismSettings does not inherit the default annotations.
 
-1. Use one NVIDIA H100 with 80 GB VRAM for the initial run. Google recommends at least an H100; this is our initial configuration, not a measured minimum. Do not rent a multi-GPU cluster or train the model.
-2. Use a separate Linux environment with Python 3.12. Inspect GPU, driver, system RAM, and free disk space first. Record the actual configuration.
-3. Pin the official repositories and dependency versions that work. Verified research-code commit: `0db53bd4352c66d1e00a049a81da373a066e6670`. Verified Hugging Face checkpoint revision: `a8f293a76ee73d5b57f3bf2ae146510589fcf187`. Follow current JAX installation guidance: CUDA 13 pip wheels require Linux NVIDIA driver 580 or newer; CUDA 12 is an alternative for a compatible older driver. Confirm JAX sees the NVIDIA GPU rather than silently using the CPU.
-4. Use an authorized checkpoint from the official model repository. Keep account credentials out of source, prompts, screenshots, logs, responses, and exported files. Use the platform's private secret settings.
-5. The checkpoint download is roughly 735 MB, but runtime GPU memory, reference data, dependencies, and caches need additional space. Measure these; do not infer RAM requirements from checkpoint file size.
+EXACT FIRST VARIANT
+Use GRCh38 chr9:128226027:G>A, the variant in my Atlas link. Variant position is 1-based; intervals below are 0-based, half-open:
+- Model input: [127701739,128750315), 1,048,576 bases.
+- Default display: [128226006,128226047), 41 bases.
+- Display reference: CCTGTCCCCACCTCCTCCCCGGGTGCAGGACGGGCCTCTTC.
+- Input SHA-256: 9498733b77b33b237673796c2f5d30396bd8f134494daa2c77043a0caf2f94d4.
+The repository data/reference/dnm1-variants.json contains independently verified descriptors for this variant and the earlier chr9:128225994:G>A. Do not reuse the earlier variant's sequence, interval or result label. Do not pad a short excerpt to impersonate a full genomic context.
 
-## First scientific run
+From the repository root, run:
+python inference/run_dnm1.py \
+  --variant 'chr9:128226027:G>A' \
+  --checkpoint /absolute/path/to/authorized-hf-snapshot \
+  --fasta /absolute/path/to/GRCh38.p13.genome.fa \
+  --gtf /absolute/path/to/gencode.v46.annotation.gtf.gz.feather \
+  --splice-site-starts /absolute/path/to/gencode.v46.splice_sites_starts.feather \
+  --splice-site-ends /absolute/path/to/gencode.v46.splice_sites_ends.feather \
+  --output /absolute/path/to/new/dnm1-analysis.json
 
-Use the published DNM1 example already shown in Helix:
+Resolve glutamatergic-neuron identifiers from loaded-model metadata. Preserve all returned biological tracks in RNA_SEQ, SPLICE_SITES and SPLICE_SITE_USAGE, keeping SPLICE_SITES tissue independent. Missing supported outputs or incompatible metadata must fail explicitly, not become a different tissue. The first crop fits the lab's 5000-row/2-MiB contract and is applied only after full-context prediction. Do not normalize or invent uncertainty.
 
-- Assembly: GRCh38 / hg38.
-- Variant: chr9:128225994 G>A, position is 1-based.
-- Verified forward reference excerpt, chr9:128225974–128226014 inclusive:
-  `CACTTCTCCTCCCCACCCACGGCTGCTCCTCCTCCTGTCCC`
-- The G at zero-based display index 20 must match the reference genome.
+DELIVER THE FIRST PROOF
+Return the actual dnm1-analysis.json and its dnm1-analysis.source-result.json sidecar. The first is directly importable in Helix; the second preserves actual arrays, original metadata, runtime provenance and source hashes. Preserve both; the analysis references the exact raw-file SHA-256. Report real GPU configuration, load/prediction timing and observed memory metrics, marking unavailable measurements.
 
-Load the real GRCh38 reference context using the official model's reference-genome setup. The model context must be the full supported 1,048,576-base interval centered using the official genome classes. Do not pad the 41-base display excerpt with unknown bases and present it as the real genomic context. Keep 1-based variant positions distinct from 0-based, half-open intervals.
+Run repository offline tests before the GPU test, but do not call passing tests proof of inference. Inspect actual REF/ALT shapes, values, metadata and file hashes. Open the analysis in the lab and generate a figure from those values. Do not replace a failed run with synthetic data.
 
-Load the pretrained model once and reuse it. Resolve actual supported RNA-seq and splicing biosample metadata from the model. List available glutamatergic-neuron tracks and select a real supported identifier; do not guess an ontology ID. Use reference-versus-alternate prediction for the selected biosample and supported RNA-seq/splicing outputs. If a relevant track is absent, report unavailable instead of substituting a different cell type silently.
+These outputs are molecular predictions, not Atlas AVI, experimental measurements, clinical probabilities, vaccine efficacy or a predicted creature. SPLICE_SITE_USAGE is not SPLICE_JUNCTIONS. The selected Atlas Brain Cortex junction and glutamatergic-neuron track filter are different biosamples. Do not conflate them.
 
-Export the original track metadata, coordinates, units when supplied, and numerical reference/alternate values for a small region around the variant. Crop the prediction for display only after running full-context inference. Record any normalization or aggregation explicitly. Prefer unnormalized, full-resolution values for this first run.
+FOLLOWING THAT PROOF: PRIVATE SERVICE
+Prepare a bounded Python service around the same validated input/output path, with authenticated HTTPS, one active inference, idempotent request IDs, bounded jobs and expiry. Proposed routes:
+GET /v1/health
+GET /v1/metadata
+POST /v1/predictions
+GET /v1/predictions/{jobId}
+Keep it private until readiness and a real authenticated prediction are verified. Public website job integration is not implemented merely by defining these routes. Return the OpenAPI contract, stable HTTPS base URL and private setting names needed by Helix; never print tokens. The website backend will call the service after integration.
 
-Validate shapes, aligned reference/alternate coordinates, finite values, the input reference allele, and the selected tissue metadata. Record cold-start time, warm prediction time, peak GPU memory, checkpoint version, and reference provenance. Save a small JSON result plus a simple reference-versus-alternate plot.
+The original GPU attachment fixed chr9:128225994:G>A during initialization and echoed the request's variant in its response. Do not relax that schema alone: construct model variant, context, cache key and returned provenance from the same selected descriptor. The normalized runner output is the preferred first delivery. The repository also has a converter for the legacy raw service contract; do not force the new raw sidecar into that shape.
 
-This computes AlphaGenome molecular predictions. It does not produce the separate Atlas AVI score, measured lab evidence, a whole-cell simulation, or a predicted human/creature appearance. Do not hardcode the published 39-base RNA extension into a fresh model result. If the new prediction differs from the paper, retain and explain the actual output.
-
-## API contract for the lab
-
-Create a small Python FastAPI service beside the loaded model, with a bounded queue and one active prediction at a time initially. The browser will not call this GPU service directly: our Node.js lab backend will call it and keep credentials private.
-
-All routes require `Authorization: Bearer <service-token>`. Use HTTPS, request-size limits, bounded jobs, timeouts, and per-job expiry. Do not return filesystem paths, stack traces, or secrets. Keep inference on a worker rather than blocking the HTTP server. Start with only the 41-base DNM1 display window; no genome-wide scans or arbitrary sequence uploads.
-
-- `GET /v1/health`: readiness (`starting` or `ready`), model name and revision. Only report ready when weights are loaded and the real smoke test passes.
-- `GET /v1/metadata`: supported biosample identifiers, labels, and output types for this experiment.
-- `POST /v1/predictions`: accept the request below and return HTTP 202 with `jobId` and `status: "queued"`. A repeated `requestId` with the same payload must return the same job. Reject a reused ID with a different payload.
-- `GET /v1/predictions/{jobId}`: return `queued`, `running`, `completed`, or `failed`. Completed jobs contain the numerical result and provenance. Failed jobs contain a short sanitized error and no fabricated result.
-
-Example request shape (replace the biosample placeholder with a metadata-verified identifier):
-
-```json
-{
-  "requestId": "unique-request-id",
-  "variant": {
-    "assembly": "GRCh38",
-    "chromosome": "chr9",
-    "position": 128225994,
-    "reference": "G",
-    "alternate": "A"
-  },
-  "biosampleId": "identifier-returned-by-metadata",
-  "outputs": ["RNA_SEQ", "SPLICE_SITES", "SPLICE_SITE_USAGE"]
-}
-```
-
-A completed result must include `sourceKind: "model_inference"`, the exact variant and biosample, model/checkpoint revision, reference-genome provenance, input interval, generation time, and a `tracks` array. Each track needs its output type, actual track name, biosample identifier, strand, unit (or null if unspecified), 0-based start, bin size in bases, and equal-length numerical `reference` and `alternate` arrays. Include the output interval and any transformations. Do not invent units, scores, probabilities, or confidence intervals.
-
-Cache using the entire validated variant, biosample, output set, reference version, and model revision. The lab will discard results that no longer match the session's current edit.
-
-## Delivery
-
-Return:
-
-1. The service's stable HTTPS base URL and the route contract/OpenAPI document.
-2. The name of the private setting containing the service token; never print the token in chat. Our lab backend will need matching private `GPU_API_BASE_URL` and `GPU_API_TOKEN` settings.
-3. The actual first prediction JSON and plot, plus timings, peak GPU memory, model version, and selected biosample metadata.
-4. The service source/setup instructions and whether the GPU remains running. Include the idle-shutdown behavior and how to resume it.
-
-If account access, model terms, hardware, a stable HTTPS endpoint, or model output is blocked, state precisely which step failed. Do not call the service working until an authenticated request has returned a real inspected prediction. Preserve existing Higgsfield projects, including the brain viewer. Do not deploy or change the Helix website; I will connect the lab backend after receiving your service contract.
+Record whether the GPU remains running, its verified idle-shutdown behavior and how to resume. Stop idle paid compute after collecting the proof unless maintaining the authenticated service is needed. If a step fails, report the exact error and last successful step; do not call the service ready or the model connected. Do not change or deploy the Helix website from this GPU task.

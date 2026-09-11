@@ -11,9 +11,12 @@ Usage:
   npx tsx inference/import-service-result.ts --input /path/first-prediction.json --output-dir /path/new-analysis
 
 The output directory must not exist; its parent directory must already exist.
-Accepts the delivered v0.1-preflight raw PredictionResult for GRCh38
-chr9:128225994:G>A only. The Atlas link variant chr9:128226027:G>A and the
-standalone run_dnm1.py format are not supported by this converter.
+Accepts the raw PredictionResult shape for either independently verified
+GRCh38 DNM1 variant: chr9:128225994:G>A or chr9:128226027:G>A.
+All reference hashes and intervals must match the selected variant.
+The original GPU attachment still needs coordinated request/model updates
+before it can compute chr9:128226027:G>A. Changing its label is insufficient.
+Standalone run_dnm1.py analytical outputs can be imported in the website directly.
 No API request, GPU execution, credential access or upload occurs.
 `;
 
@@ -38,13 +41,14 @@ export function importServiceResultFile(input: string, outputDirectory: string):
   try { sourceText = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
   catch { throw new Error("Service result must be valid UTF-8 JSON."); }
   const result = parseServiceResultJSON(sourceText);
+  const variant = `${result.variant.chromosome}:${result.variant.position}:${result.variant.reference}>${result.variant.alternate}`;
   const sourceSha256 = createHash("sha256").update(bytes).digest("hex");
   const dataset = convertServiceResultToDataset(result, { filename: "source-result.json", sha256: sourceSha256 });
   const analysisText = JSON.stringify(dataset) + "\n";
   if (Buffer.byteLength(analysisText, "utf8") > ANALYSIS_PAYLOAD_LIMIT) throw new Error("Converted analysis exceeds the 2 MB limit; no rows were dropped.");
   const readme = `# Imported AlphaGenome result
 
-Open analysis.json using the lab's JSON import. It contains ${dataset.rows.length} supplied signal bins for GRCh38 chr9:128225994:G>A.
+Open analysis.json using the lab's JSON import. It contains ${dataset.rows.length} supplied signal bins for GRCh38 ${variant}.
 
 - source-result.json is a byte-for-byte copy of the supplied raw service result.
 - Its SHA-256 is ${sourceSha256} and is recorded in analysis.json.
@@ -54,7 +58,7 @@ Open analysis.json using the lab's JSON import. It contains ${dataset.rows.lengt
 - The raw artifact retains original metadata, timings, checkpoint manifest hash and other source fields not displayed by the lab. Keep it with analysis.json; the lab does not upload this artifact automatically.
 - The whole-reference FASTA SHA-256 was not supplied and remains null. The input context hash is recorded separately.
 - JSON is the complete analytical export; a later CSV export alone will not retain the metadata or artifact reference.
-- This converter does not support the different Atlas variant chr9:128226027:G>A, Atlas score exports, or the standalone run_dnm1.py matrix format.
+- This converter accepts either verified DNM1 variant only when its own context, crop and reference match. It does not accept Atlas score exports or queued/completed job envelopes. The standalone runner's analytical output is already importable by the website and needs no conversion here.
 
 This is imported model output, not independent experimental evidence or a clinical outcome estimate. No live GPU endpoint was connected by this import.
 `;

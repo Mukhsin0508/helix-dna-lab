@@ -11,6 +11,10 @@ The owner selected data-driven analytical tools using AlphaGenome Atlas as the r
 - [x] Verify analytical figure rendering, filtering, imports and SVG/PNG/CSV/recipe exports in the browser.
 - [x] Deploy and verify this analytical version publicly, including saved figure settings restored from D1.
 - [x] Add a metadata-preserving GPU service-result import bridge with a checksummed raw artifact, exact REF/ALT bins, tissue scope and source-reported inference provenance. A completed real service result is still required; this bridge does not execute or connect a model.
+- [x] Independently verify the two DNM1 reference contexts; bind each imported result to its exact variant, sequence, hash and crop instead of relabeling the earlier variant.
+- [x] Prepare the explicit-variant runner with required annotations, direct analytical export and raw sidecar; verify the Python output through the actual TypeScript importer. These are offline checks, not model execution.
+- [ ] Run the corrected explicit-variant GPU runner and import its actual analysis/raw-result pair. Offline validation does not check this box.
+- [ ] Add a junction dataset and aligned REF/ALT sashimi plots preserving both endpoints, strand, missing values, shared scales and complete source metadata.
 - [ ] Connect live Atlas lookup or an authorized AlphaGenome service, with job status and recorded model version.
 - [x] Add typed experimental-measurement JSON imports and a source-backed DNM1 Table S4 plot, preserving printed values and missing uncertainty.
 - [ ] Add prediction-versus-measurement analysis once matching predictions, endpoints and assay contexts are available.

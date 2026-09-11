@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "reference": {
+    "url": "https://storage.googleapis.com/alphagenome/reference/gencode/hg38/GRCh38.p13.genome.fa",
+    "indexUrl": "https://storage.googleapis.com/alphagenome/reference/gencode/hg38/GRCh38.p13.genome.fa.fai",
+    "indexSha256": "9293fb33f63b7f09d8fadc055d78e401d07c76de0211243fba778780ff836ff9",
+    "assembly": "GRCh38",
+    "version": "GRCh38.p13",
+    "source": "Official AlphaGenome GENCODE reference distribution",
+    "indexEntry": {
+      "chromosome": "chr9",
+      "length": 138394717,
+      "offset": 1562097136,
+      "line_bases": 60,
+      "line_bytes": 61
+    },
+    "indexRequest": {
+      "etag": "\"77858c10a85ee4c70f49de4a2a3da7f5\"",
+      "generation": "1766086454720750",
+      "lastModified": "Thu, 18 Dec 2025 19:34:14 GMT",
+      "contentRange": null,
+      "retrievedBytes": 22027,
+      "retrievedBytesSha256": "9293fb33f63b7f09d8fadc055d78e401d07c76de0211243fba778780ff836ff9"
+    },
+    "fastaEtag": "\"edee5408303f6c1c6bae1c76ffd23671\"",
+    "fastaGeneration": "1766084693379925"
+  },
+  "coordinateSystem": {
+    "variant": "1-based",
+    "interval": "0-based half-open",
+    "orientation": "forward reference (unstranded); not gene-oriented reverse complement"
+  },
+  "clientSource": {
+    "revision": "aa6fc8f6faadcb8c910fa2b85b57386fbd5c7b5d",
+    "url": "https://raw.githubusercontent.com/google-deepmind/alphagenome/aa6fc8f6faadcb8c910fa2b85b57386fbd5c7b5d/src/alphagenome/data/genome.py",
+    "sha256": "4c297b2dde8f751c62211a1295ec243280eff412255b915cdf13c411b5168b61",
+    "committedAt": "2026-09-08T10:35:56Z",
+    "sourceBytes": 39244,
+    "variantSemanticsLines": "712-723",
+    "centerSemanticsLines": "335-339",
+    "resizeSemanticsLines": "438-444",
+    "method": "Source inspected and checksummed; formulas independently implemented; source never executed"
+  },
+  "sequenceChecksumEncoding": "SHA-256 of uppercase ASCII bases with FASTA line breaks removed; no trailing newline",
+  "inputLength": 1048576,
+  "displayLength": 41,
+  "crossVariantVerification": {
+    "distanceBases": 33,
+    "overlapLength": 1048543,
+    "independentlyRetrievedContextsAgree": true
+  },
+  "scope": "Reference-sequence verification only. No model predictions, Atlas scores, GPU calls, or biological validation.",
+  "variants": [
+    {
+      "id": "chr9:128225994:G>A",
+      "chromosome": "chr9",
+      "position": 128225994,
+      "reference": "G",
+      "alternate": "A",
+      "inputInterval": {
+        "start": 127701706,
+        "end": 128750282
+      },
+      "displayInterval": {
+        "start": 128225973,
+        "end": 128226014
+      },
+      "displayReference": "CACTTCTCCTCCCCACCCACGGCTGCTCCTCCTCCTGTCCC",
+      "contextSha256": "dbadd0681da906be525c770f4904923dc26a79de515984431d49c057e676e08c",
+      "displaySha256": "60d754747a821bee58143f993ac3c402ab8c8ea4d1b5fbb2476e71b3ae837396",
+      "verifiedAt": "2026-09-11T01:34:49Z",
+      "verification": {
+        "referenceMatches": true,
+        "inputLength": 1048576,
+        "displayLength": 41,
+        "referenceOffset0Based": 524287,
+        "displayReferenceOffset0Based": 20,
+        "contextNCount": 0,
+        "displayNCount": 0,
+        "paddingBases": 0,
+        "displayMatchesIndependentFullContextCrop": true,
+        "fullContextRequest": {
+          "etag": "\"edee5408303f6c1c6bae1c76ffd23671\"",
+          "generation": "1766084693379925",
+          "lastModified": "Thu, 18 Dec 2025 19:04:53 GMT",
+          "contentRange": "bytes 1691927203-1692993255/3321586957",
+          "retrievedBytes": 1066053,
+          "retrievedBytesSha256": "495d526ccdc398018a062aa51930d632b0fadafb129588b51a6d4080a636bb60"
+        },
+        "displayRequest": {
+          "etag": "\"edee5408303f6c1c6bae1c76ffd23671\"",
+          "generation": "1766084693379925",
+          "lastModified": "Thu, 18 Dec 2025 19:04:53 GMT",
+          "contentRange": "bytes 1692460208-1692460249/3321586957",
+          "retrievedBytes": 42,
+          "retrievedBytesSha256": "870d4407554e98336ad991f67e9362339622c1e3f9b082a6719f75a15de529b4"
+        }
+      }
+    },
+    {
+      "id": "chr9:128226027:G>A",
+      "chromosome": "chr9",
+      "position": 128226027,
+      "reference": "G",
+      "alternate": "A",
+      "inputInterval": {
+        "start": 127701739,
+        "end": 128750315
+      },
+      "displayInterval": {
+        "start": 128226006,
+        "end": 128226047
+      },
+      "displayReference": "CCTGTCCCCACCTCCTCCCCGGGTGCAGGACGGGCCTCTTC",
+      "contextSha256": "9498733b77b33b237673796c2f5d30396bd8f134494daa2c77043a0caf2f94d4",
+      "displaySha256": "9ca7137718e7f88f5c069dcd3a1dd75783536166d682dda8a67b7f06ed0b84b5",
+      "verifiedAt": "2026-09-11T01:34:51Z",
+      "verification": {
+        "referenceMatches": true,
+        "inputLength": 1048576,
+        "displayLength": 41,
+        "referenceOffset0Based": 524287,
+        "displayReferenceOffset0Based": 20,
+        "contextNCount": 0,
+        "displayNCount": 0,
+        "paddingBases": 0,
+        "displayMatchesIndependentFullContextCrop": true,
+        "fullContextRequest": {
+          "etag": "\"edee5408303f6c1c6bae1c76ffd23671\"",
+          "generation": "1766084693379925",
+          "lastModified": "Thu, 18 Dec 2025 19:04:53 GMT",
+          "contentRange": "bytes 1691927237-1692993288/3321586957",
+          "retrievedBytes": 1066052,
+          "retrievedBytesSha256": "de457f7ffb13e0929857c8246cf3702c605eea381095a3ca5499f60c6361a7e8"
+        },
+        "displayRequest": {
+          "etag": "\"edee5408303f6c1c6bae1c76ffd23671\"",
+          "generation": "1766084693379925",
+          "lastModified": "Thu, 18 Dec 2025 19:04:53 GMT",
+          "contentRange": "bytes 1692460242-1692460282/3321586957",
+          "retrievedBytes": 41,
+          "retrievedBytesSha256": "9ca7137718e7f88f5c069dcd3a1dd75783536166d682dda8a67b7f06ed0b84b5"
+        }
+      }
+    }
+  ]
+}

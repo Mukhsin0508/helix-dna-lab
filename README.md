@@ -44,6 +44,10 @@ SNV identifiers use one-based positions, for example `chr9:128226027:G>A`. Impor
 
 Measurement JSON uses `kind: "measurements"`, a shared `experiment` context, and rows containing `variant`, `value`, `replicates` and `standardError`. Unknown replicate count or standard error must be `null`. Optional `reportedValue` preserves the source's numeric spelling, such as `0.60`. Measurement exports include both fields; JSON retains the complete assay metadata. One dataset represents a single comparable endpoint/condition aggregate.
 
+The [local GPU runner](inference/README.md) is prepared to export an analysis JSON plus its checksummed raw REF/ALT result. It requires an explicit variant and verifies that variant's full reference context against [independently retrieved descriptors](data/reference/README.md). The earlier service variant `chr9:128225994:G>A` and the requested `chr9:128226027:G>A` are kept separate. This preparation has not executed the model.
+
+Splice-junction arcs need donor and acceptor coordinates together. Positional `SPLICE_SITE_USAGE` tracks do not reproduce the Atlas `SPLICE_JUNCTIONS` view. A dedicated junction dataset and shared-scale arc plot remain to be implemented once actual junction output is available.
+
 Higgsfield-generated imagery is not part of the analytical interface. Earlier illustrative cell/replay components and their session APIs remain in the repository for compatibility; the active product is the figure workspace.
 
 ## Persistence and API

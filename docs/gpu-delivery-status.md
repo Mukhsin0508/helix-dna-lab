@@ -20,6 +20,16 @@ The [official Atlas paper, Table S4](https://storage.googleapis.com/deepmind-med
 
 The paper's Code Availability section states that AVI model source code and weights will be provided upon final publication. Deploying the base AlphaGenome checkpoint does not by itself supply official AVI scoring.
 
+### Exact-variant handoff correction
+
+The original attachment remains unchanged. Its request schema fixes position 128225994, and its adapter caches that variant and context during initialization while returning the request's variant label. Relaxing only the request schema could therefore label the old variant's output as the new one. Any service revision must construct and validate the actual model input from the same descriptor used for its response and cache key.
+
+The repository now has [independently verified descriptors](../data/reference/README.md) for both variants and an explicit-variant [local runner](../inference/README.md). For the requested `chr9:128226027:G>A`, input is `[127701739,128750315)`, display is `[128226006,128226047)`, and the context SHA-256 is `9498733b77b33b237673796c2f5d30396bd8f134494daa2c77043a0caf2f94d4`. The raw-service import bridge rejects mixed variant/context combinations.
+
+The first integration proof is now a real inference result exported as a website-compatible analysis JSON plus its original result sidecar. That does not require a live HTTP service. An authenticated service, its website job adapter and account ownership remain later integration work. The [updated execution prompt](higgsfield-gpu-execute.txt) replaces the old first-run instructions; no GPU run is implied by these repository changes.
+
+Source review also found that the pinned research implementation computes splice-junction intermediates during `predict_variant`, even when only positional tracks are requested. A FASTA-only settings object does not inherit the default splice annotations. The corrected runner supplies explicit GENCODE v46 resources; actual compatibility must still be demonstrated on the GPU. `SPLICE_JUNCTIONS` export and Atlas AVI scoring remain outside this positional-track adapter.
+
 ## Delivered artifacts and integrity
 
 The four supplied files were read from `/Users/mukhsinmukhtorov/Downloads/`. No attachment code was executed or imported, and the archive was not extracted.

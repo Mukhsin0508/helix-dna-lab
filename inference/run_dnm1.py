@@ -1,20 +1,22 @@
-"""Run one local-checkpoint DNM1 REF/ALT prediction. No download or public server."""
+"""Run an explicitly selected DNM1 case and export actual REF/ALT tracks for Helix."""
 
 from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
 import hashlib
-from importlib.metadata import version
+from importlib.metadata import distribution, PackageNotFoundError, version
 import json
 from pathlib import Path
+import re
 import sys
 import time
 from typing import TYPE_CHECKING
 
 from track_export import (
-    CONTEXT_BP, POSITION, JsonObject, crop_indices, metadata_records,
-    select_biosample, track_payload, validate_reference,
+    CONTEXT_BP, OUTPUT_TYPES, ROW_LIMIT, VARIANTS, JsonObject, VariantDescriptor,
+    centered_window, crop_indices, encoded_json, load_descriptor, metadata_records,
+    normalized_analysis, select_biosample, track_payload, validate_context,
 )
 
 if TYPE_CHECKING:
@@ -22,37 +24,128 @@ if TYPE_CHECKING:
 
 RESEARCH_COMMIT = "0db53bd4352c66d1e00a049a81da373a066e6670"
 HF_REVISION = "a8f293a76ee73d5b57f3bf2ae146510589fcf187"
+ANNOTATION_FILES = {
+    "gtf": "gencode.v46.annotation.gtf.gz.feather",
+    "spliceSiteStarts": "gencode.v46.splice_sites_starts.feather",
+    "spliceSiteEnds": "gencode.v46.splice_sites_ends.feather",
+}
 
 
-def serialize_track(track: TrackData, crop_start: int, crop_end: int) -> JsonObject:
-    """Copy only the requested coordinate window into a validated JSON payload."""
+def annotation_provenance(paths: dict[str, Path]) -> list[JsonObject]:
+    """Require all explicit annotation inputs and hash their local bytes without claiming their origin."""
+    if set(paths) != set(ANNOTATION_FILES):
+        raise ValueError("GTF and both splice-site Feather annotations are required for this pinned variant path.")
+    result: list[JsonObject] = []
+    for kind, path in paths.items():
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"Missing or empty {kind} annotation file.")
+        with path.open("rb") as handle:
+            digest = hashlib.file_digest(handle, "sha256").hexdigest()
+        result.append({"kind": kind, "sha256": digest,
+            "expectedSourceUrl": f"https://storage.googleapis.com/alphagenome/reference/gencode/hg38/{ANNOTATION_FILES[kind]}",
+            "sourceVerification": "Local bytes hashed; their source is operator-supplied and not independently authenticated."})
+    return result
+
+
+def installed_revision(package: str) -> str:
+    """Report installed package VCS metadata, or explicitly leave its revision unknown."""
+    try:
+        raw = distribution(package).read_text("direct_url.json")
+        data = json.loads(raw) if raw else {}
+        commit = data.get("vcs_info", {}).get("commit_id")
+        return commit if isinstance(commit, str) and re.fullmatch("[a-fA-F0-9]{40}", commit) else "Not reported"
+    except (PackageNotFoundError, ValueError, AttributeError):
+        return "Not reported"
+
+
+def serialize_track(track: TrackData, descriptor: VariantDescriptor,
+                    crop_start: int, crop_end: int) -> JsonObject:
+    """Check the actual full output and preserve its requested crop and original metadata."""
     import numpy as np
 
     interval = track.interval
-    if interval is None or interval.chromosome != "chr9" or interval.strand == "-":
-        raise ValueError("Expected a forward-coordinate chr9 prediction interval.")
-    first, last = crop_indices(interval.start, interval.end, track.resolution,
-                               len(track.values), crop_start, crop_end)
+    if interval is None or (interval.chromosome, interval.start, interval.end) != (descriptor.chromosome, descriptor.input_start, descriptor.input_end) or interval.strand == "-":
+        raise ValueError("Model output does not match this variant's forward input interval.")
+    if track.resolution != 1:
+        raise ValueError("This export requires actual one-base RNA/splicing tracks.")
     records = metadata_records(track.metadata.to_json(orient="records"))
-    values = np.asarray(track.values[first:last], dtype=np.float64).tolist()
-    return track_payload(values, records, start=crop_start, end=crop_end,
-                         resolution=track.resolution)
+    full_values = np.asarray(track.values)
+    if full_values.ndim != 2 or full_values.shape != (CONTEXT_BP, len(records)) or full_values.dtype.kind not in "fiu" or not np.isfinite(full_values).all():
+        raise ValueError("Model output has invalid dimensions, numeric values or metadata alignment.")
+    first, last = crop_indices(interval.start, interval.end, track.resolution,
+                               len(full_values), crop_start, crop_end)
+    values = full_values[first:last].astype(np.float64).tolist()
+    return track_payload(values, records, start=crop_start, end=crop_end, resolution=1)
+
+
+def selected_metadata(records_by_output: dict[str, list[JsonObject]], biosample: str,
+                      crop_bp: int) -> tuple[list[str], int]:
+    """Resolve a common exact tissue identifier and reject oversized requested exports early."""
+    tissue_sets = [set(select_biosample(records, biosample)) for output, records in records_by_output.items() if output != "SPLICE_SITES"]
+    common = set.intersection(*tissue_sets) if tissue_sets else set()
+    if tissue_sets and not common:
+        raise ValueError("The requested RNA/usage outputs do not share this exact biosample.")
+    count = 0
+    for output, records in records_by_output.items():
+        selected = [record for record in records if str(record.get("name", "")).lower() != "padding" and (
+            output == "SPLICE_SITES" or (record.get("ontology_curie") in common and str(record.get("biosample_name", "")).casefold() == biosample.casefold()))]
+        if not selected:
+            raise ValueError(f"No biological {output} tracks are available for the requested selection.")
+        count += len(selected)
+    if count * crop_bp > ROW_LIMIT:
+        raise ValueError(f"Requested crop would contain {count * crop_bp} rows; choose a smaller --crop-bp (maximum {ROW_LIMIT // count} for {count} tracks).")
+    return sorted(common), count
+
+
+def write_result_files(source: JsonObject, descriptor: VariantDescriptor,
+                       output_path: Path) -> tuple[Path, int]:
+    """Write an importable analysis and the exact raw result exclusively; clean up partial writes."""
+    source_path = output_path.with_name(f"{output_path.stem}.source-result.json")
+    if source_path == output_path or output_path.exists() or source_path.exists():
+        raise ValueError("Analysis or raw result already exists; choose a new --output path.")
+    if not output_path.parent.is_dir():
+        raise ValueError("The output parent directory must already exist.")
+    source_bytes = encoded_json(source)
+    source_hash = hashlib.sha256(source_bytes).hexdigest()
+    analysis = normalized_analysis(source, descriptor, source_path.name, source_hash)
+    analysis_bytes = encoded_json(analysis)
+    created: list[Path] = []
+    try:
+        for path, content in ((source_path, source_bytes), (output_path, analysis_bytes)):
+            with path.open("xb") as handle:
+                created.append(path)
+                handle.write(content)
+            path.chmod(0o600)
+    except BaseException:
+        for path in reversed(created):
+            path.unlink(missing_ok=True)
+        raise
+    return source_path, len(analysis["rows"])
 
 
 def predict(checkpoint: Path, fasta_path: Path, output_path: Path,
-            biosample: str, crop_bp: int) -> None:
-    """Validate local inputs, run the official full model, and write one result."""
-    if output_path.exists():
-        raise ValueError("Output exists; choose a new output path.")
+            biosample: str, crop_bp: int, variant_id: str,
+            requested_outputs: tuple[str, ...] = OUTPUT_TYPES, *,
+            gtf: Path, splice_site_starts: Path, splice_site_ends: Path) -> None:
+    """Validate one verified variant, run the real full model, and retain every selected output bin."""
+    descriptor = load_descriptor(variant_id)
+    source_path = output_path.with_name(f"{output_path.stem}.source-result.json")
+    if output_path.exists() or source_path.exists() or not output_path.parent.is_dir():
+        raise ValueError("Use a new output filename inside an existing directory.")
+    if not biosample.strip() or len(biosample) > 200:
+        raise ValueError("Provide an exact biosample name of 1–200 characters.")
+    if type(crop_bp) is not int or not 1 <= crop_bp <= ROW_LIMIT:
+        raise ValueError("--crop-bp must be an integer from 1 through 5000; all selected tracks must fit.")
+    if not requested_outputs or len(set(requested_outputs)) != len(requested_outputs) or any(name not in OUTPUT_TYPES for name in requested_outputs):
+        raise ValueError("Choose unique supported RNA/splicing output types.")
     for name in ("_CHECKPOINT_METADATA", "_METADATA", "manifest.ocdbt"):
         if not (checkpoint / name).is_file():
-            raise ValueError(f"Not an official Orbax checkpoint root: missing {name}.")
+            raise ValueError(f"Checkpoint directory is missing {name}.")
     if not fasta_path.is_file() or not Path(str(fasta_path) + ".fai").is_file():
-        raise ValueError("Provide a local GRCh38 FASTA and its existing .fai index.")
-    if not 64 <= crop_bp <= 32768 or crop_bp % 2:
-        raise ValueError("--crop-bp must be an even integer from 64 through 32768.")
+        raise ValueError("Provide a local GRCh38.p13 FASTA and its existing .fai index.")
+    annotations = annotation_provenance({"gtf": gtf, "spliceSiteStarts": splice_site_starts, "spliceSiteEnds": splice_site_ends})
 
-    # Runtime imports keep --help and pure validation tests free of model dependencies.
+    # Runtime imports keep help and pure export validation independent of model dependencies.
     import jax
     from alphagenome.data import genome
     from alphagenome.io import fasta
@@ -61,86 +154,106 @@ def predict(checkpoint: Path, fasta_path: Path, output_path: Path,
     devices = [device for device in jax.devices() if device.platform == "gpu"]
     if not devices:
         raise ValueError("No JAX GPU device found; verify the Linux CUDA/JAX installation.")
-    extractor = fasta.FastaExtractor(str(fasta_path))
-    reference = validate_reference(extractor.extract(genome.Interval("chr9", POSITION - 21, POSITION + 20)))
-    variant = genome.Variant("chr9", POSITION, "G", "A")
+    variant = genome.Variant(chromosome=descriptor.chromosome, position=descriptor.position,
+                             reference_bases=descriptor.reference, alternate_bases=descriptor.alternate)
     interval = variant.reference_interval.resize(CONTEXT_BP)
+    display = variant.reference_interval.resize(41)
+    if (interval.start, interval.end, display.start, display.end) != (descriptor.input_start, descriptor.input_end, descriptor.display_start, descriptor.display_end):
+        raise ValueError("Installed genome interval classes disagree with the selected verified descriptor.")
+    extractor = fasta.FastaExtractor(str(fasta_path))
     full_reference = extractor.extract(interval)
-    if len(full_reference) != CONTEXT_BP or full_reference[variant.start - interval.start] != "G":
-        raise ValueError("Full-context reference length or DNM1 reference allele is invalid.")
+    reference = extractor.extract(display)
+    validate_context(descriptor, full_reference, reference)
+    crop = variant.reference_interval.resize(crop_bp)
+    if (crop.start, crop.end) != centered_window(descriptor.position, crop_bp):
+        raise ValueError("Installed genome classes use an unexpected display crop convention.")
 
-    # Preserve both species' checkpoint shapes. Only human sequence extraction is needed.
+    # Retain both species' metadata to validate the actual checkpoint's complete parameter shapes.
     settings = {
-        dna_model.Organism.HOMO_SAPIENS: dna_model.OrganismSettings(fasta_path=str(fasta_path)),
+        dna_model.Organism.HOMO_SAPIENS: dna_model.OrganismSettings(
+            fasta_path=str(fasta_path), gtf_feather_path=str(gtf),
+            splice_site_starts_feather_path=str(splice_site_starts), splice_site_ends_feather_path=str(splice_site_ends)),
         dna_model.Organism.MUS_MUSCULUS: dna_model.OrganismSettings(),
     }
     started = time.monotonic()
     model = dna_model.create(str(checkpoint), organism_settings=settings, device=devices[0])
-    rna_metadata = model.output_metadata().rna_seq
-    if rna_metadata is None:
-        raise ValueError("The checkpoint provides no RNA-seq metadata.")
-    curies = select_biosample(metadata_records(rna_metadata.to_json(orient="records")), biosample)
-    result = model.predict_variant(
-        interval=interval, variant=variant, ontology_terms=curies,
-        requested_outputs=[dna_model.OutputType.RNA_SEQ],
-    )
-    if result.reference.rna_seq is None or result.alternate.rna_seq is None:
-        raise ValueError("Model returned no REF/ALT RNA-seq result.")
-    crop_start = variant.start - crop_bp // 2
-    crop_end = crop_start + crop_bp
-    reference_tracks = serialize_track(result.reference.rna_seq, crop_start, crop_end)
-    alternate_tracks = serialize_track(result.alternate.rna_seq, crop_start, crop_end)
-    if reference_tracks["metadata"] != alternate_tracks["metadata"]:
-        raise ValueError("REF/ALT track metadata differ; do not compare mismatched tracks.")
+    records_by_output: dict[str, list[JsonObject]] = {}
+    loaded_metadata = model.output_metadata()
+    for name in requested_outputs:
+        frame = loaded_metadata.get(dna_model.OutputType[name])
+        if frame is None:
+            raise ValueError(f"The loaded model provides no {name} metadata.")
+        records_by_output[name] = metadata_records(frame.to_json(orient="records"))
+    curies, _ = selected_metadata(records_by_output, biosample, crop_bp)
+    result = model.predict_variant(interval=interval, variant=variant,
+        ontology_terms=curies or None,
+        requested_outputs=[dna_model.OutputType[name] for name in requested_outputs])
+    outputs: list[JsonObject] = []
+    for name in requested_outputs:
+        output_type = dna_model.OutputType[name]
+        ref, alt = result.reference.get(output_type), result.alternate.get(output_type)
+        if ref is None or alt is None:
+            raise ValueError(f"The model returned no REF/ALT {name} result.")
+        reference_tracks = serialize_track(ref, descriptor, crop.start, crop.end)
+        alternate_tracks = serialize_track(alt, descriptor, crop.start, crop.end)
+        if reference_tracks["metadata"] != alternate_tracks["metadata"]:
+            raise ValueError("REF/ALT track metadata differ; do not compare mismatched tracks.")
+        outputs.append({"outputType": name, "reference": reference_tracks, "alternate": alternate_tracks})
     payload: JsonObject = {
-        "schemaVersion": 1, "sourceKind": "model_inference", "provider": "alphagenome_research",
-        "assembly": "GRCh38.p13", "variant": "chr9:128225994:G>A",
-        "variantPositionConvention": "1-based", "biosample": biosample,
-        "ontologyCuries": list(curies), "modality": "RNA_SEQ",
-        "inputInterval": {"chromosome": "chr9", "start": interval.start, "end": interval.end},
-        "reference": reference_tracks, "alternate": alternate_tracks,
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-        "durationSeconds": round(time.monotonic() - started, 3),
+        "schemaVersion": 2, "sourceKind": "model_inference", "provider": "alphagenome_research",
+        "assembly": descriptor.reference_version, "variant": descriptor.id,
+        "variantPositionConvention": "1-based", "biosample": biosample, "ontologyCuries": curies,
+        "inputInterval": {"chromosome": descriptor.chromosome, "start": interval.start, "end": interval.end, "coordinateSystem": "0-based-half-open"},
+        "outputInterval": {"chromosome": descriptor.chromosome, "start": crop.start, "end": crop.end, "coordinateSystem": "0-based-half-open"},
+        "outputs": outputs, "verifiedReferenceExcerpt": reference,
+        "verifiedReferenceInterval": {"chromosome": descriptor.chromosome, "start": display.start, "end": display.end, "coordinateSystem": "0-based-half-open"},
+        "createdAt": datetime.now(timezone.utc).isoformat(), "durationSeconds": time.monotonic() - started,
         "provenance": {
             "checkpointSource": "https://huggingface.co/google/alphagenome-all-folds",
-            "expectedCheckpointRevision": HF_REVISION,
-            "expectedResearchCommit": RESEARCH_COMMIT,
-            "revisionVerification": "Expected pins; operator must verify the local checkout and checkpoint origin.",
+            "expectedCheckpointRevision": HF_REVISION, "expectedResearchCommit": RESEARCH_COMMIT,
+            "researchRevision": installed_revision("alphagenome_research"), "clientRevision": installed_revision("alphagenome"),
+            "revisionVerification": "Installed package direct-url metadata only. Expected pins and checkpoint origin are not verified by this runner.",
             "checkpointMetadataSha256": hashlib.sha256((checkpoint / "_METADATA").read_bytes()).hexdigest(),
+            "checkpointManifestFileSha256": hashlib.sha256((checkpoint / "manifest.ocdbt").read_bytes()).hexdigest(),
             "referenceWindowSha256": hashlib.sha256(reference.encode()).hexdigest(),
             "inputSequenceSha256": hashlib.sha256(full_reference.encode()).hexdigest(),
-            "referenceSource": "https://storage.googleapis.com/alphagenome/reference/gencode/hg38/GRCh38.p13.genome.fa",
-            "researchPackageVersion": version("alphagenome_research"),
-            "clientPackageVersion": version("alphagenome"), "jaxVersion": version("jax"),
-            "gpu": devices[0].device_kind,
+            "referenceIndexSha256": hashlib.sha256(Path(str(fasta_path) + ".fai").read_bytes()).hexdigest(),
+            "referenceSource": descriptor.reference_url,
+            "annotations": annotations,
+            "researchPackageVersion": version("alphagenome_research"), "clientPackageVersion": version("alphagenome"),
+            "jaxVersion": version("jax"), "gpu": devices[0].device_kind,
         },
         "limitations": [
-            "New local model inference, not an Atlas AVI lookup or independent lab validation.",
-            "RNA-seq values alone do not establish a 13-amino-acid extension or clinical outcome.",
-            "No GTF, reference splice-site annotation, or calibration tables are used in this RNA-only smoke test.",
-            "Cropping only; no normalization, invented signal, or confidence conversion.",
-            "Any 3D animation remains illustrative, not measured molecular motion.",
+            "Local molecular model inference, not Atlas AVI or independent experimental evidence.",
+            "Splice sites are tissue agnostic; RNA-seq and splice-site usage retain their actual biosample metadata.",
+            "No splice-junction or AVI score is exported.",
+            "Explicit GENCODE GTF and splice-site annotation files were supplied for the pinned model path; their source identity remains operator-supplied. No PAS or calibration file was used.",
+            "Only the explicit display crop is exported. Full-context inference preceded cropping; no normalization, smoothing or outcome probability was added.",
         ],
     }
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("x", encoding="utf-8") as handle:
-        json.dump(payload, handle, allow_nan=False, separators=(",", ":"))
-        handle.write("\n")
-    print(f"Wrote verified REF/ALT RNA track payload to {output_path}")
+    raw_path, row_count = write_result_files(payload, descriptor, output_path)
+    print(f"Saved {row_count} supplied REF/ALT bins for {descriptor.id}: {output_path}\nOriginal result: {raw_path}")
 
 
 def main() -> int:
-    """Parse local file arguments; return zero only after a real result is saved."""
+    """Parse explicit inputs; return zero only after a real result and analytical export are saved."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=Path, required=True, help="Previously authorized HF all-folds Orbax snapshot root")
+    parser.add_argument("--variant", choices=VARIANTS, required=True, help="Exact one-based GRCh38 variant; the cases are never substituted")
+    parser.add_argument("--checkpoint", type=Path, required=True, help="Previously authorized local all-folds Orbax snapshot root")
     parser.add_argument("--fasta", type=Path, required=True, help="Local GRCh38.p13.genome.fa with .fai")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--gtf", type=Path, required=True, help="Local GENCODE v46 annotation.gtf.gz.feather")
+    parser.add_argument("--splice-site-starts", type=Path, required=True, help="Local GENCODE v46 splice_sites_starts.feather")
+    parser.add_argument("--splice-site-ends", type=Path, required=True, help="Local GENCODE v46 splice_sites_ends.feather")
+    parser.add_argument("--output", type=Path, required=True, help="New analysis JSON path; an adjacent raw result is retained")
     parser.add_argument("--biosample", default="glutamatergic neuron")
-    parser.add_argument("--crop-bp", type=int, default=4096)
+    parser.add_argument("--crop-bp", type=int, default=41, help="Explicit centered display crop; full inference remains 1,048,576 bp")
+    parser.add_argument("--outputs", nargs="+", choices=OUTPUT_TYPES, default=list(OUTPUT_TYPES))
     args = parser.parse_args()
     try:
-        predict(args.checkpoint.resolve(), args.fasta.resolve(), args.output.resolve(), args.biosample, args.crop_bp)
-    except (ValueError, OSError, ImportError) as error:
+        predict(args.checkpoint.resolve(), args.fasta.resolve(), args.output.resolve(),
+                args.biosample, args.crop_bp, args.variant, tuple(args.outputs),
+                gtf=args.gtf.resolve(), splice_site_starts=args.splice_site_starts.resolve(), splice_site_ends=args.splice_site_ends.resolve())
+    except (ValueError, OSError, ImportError, KeyError) as error:
         print(f"No result produced: {error}", file=sys.stderr)
         return 1
     return 0

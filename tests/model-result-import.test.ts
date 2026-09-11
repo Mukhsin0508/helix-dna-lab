@@ -9,6 +9,7 @@ import test from "node:test";
 import { parseDatasetJSON } from "../shared/analysis-import";
 import { convertServiceResultToDataset, parseServiceResultJSON, SERVICE_REFERENCE, type ServicePredictionResult } from "../shared/model-result-import";
 import { importServiceResultFile } from "../inference/import-service-result";
+import referenceEvidence from "../data/reference/dnm1-variants.json";
 
 /** Synthetic numbers test conversion only. They are not recorded scientific predictions. */
 function syntheticResult(): ServicePredictionResult {
@@ -77,12 +78,46 @@ test("records source-reported provenance without inventing whole-genome verifica
   assert.equal(dataset.provenance.assembly, "GRCh38.p13");
 });
 
-test("rejects missing results, job envelopes, standalone outputs and the other DNM1 variant", () => {
+test("rejects missing results, job envelopes, standalone raw outputs and relabeled DNM1 results", () => {
   for (const raw of [{ status: "queued" }, { status: "completed", result: syntheticResult() }, { sourceKind: "model_inference", reference: {}, alternate: {} }]) {
     assert.throws(() => parseServiceResultJSON(JSON.stringify(raw)));
   }
   const wrongVariant = syntheticResult() as unknown as { variant: { position: number } }; wrongVariant.variant.position = 128226027;
+  assert.throws(() => convertServiceResultToDataset(wrongVariant, artifact), /exact variant|verified sequence/);
+  wrongVariant.variant.position = 128226028;
   assert.throws(() => convertServiceResultToDataset(wrongVariant, artifact), /variant.position/);
+});
+
+test("accepts the requested variant only with its own independently verified reference and every matching interval", () => {
+  const descriptor = referenceEvidence.variants.find(variant => variant.id === 'chr9:128226027:G>A')!;
+  assert.ok(descriptor);
+  const source = syntheticResult();
+  source.variant.position = descriptor.position;
+  Object.assign(source.inputInterval, descriptor.inputInterval);
+  Object.assign(source.fullOutputInterval, descriptor.inputInterval);
+  Object.assign(source.outputInterval, descriptor.displayInterval);
+  Object.assign(source.transformations[0], descriptor.displayInterval);
+  source.displayReference = descriptor.displayReference;
+  source.referenceGenome.contextSha256 = descriptor.contextSha256;
+  for (const track of source.tracks) track.start = descriptor.displayInterval.start;
+  const dataset = convertServiceResultToDataset(source, artifact);
+  assert.equal(dataset.provenance.inference?.variant, descriptor.id);
+  assert.equal(dataset.provenance.inference?.inputSequenceSha256, descriptor.contextSha256);
+  assert.equal(dataset.rows[0].position, descriptor.displayInterval.start);
+  assert.equal(dataset.rows[40].position, descriptor.displayInterval.end - 1);
+  assert.ok(dataset.provenance.context.includes(descriptor.id));
+  assert.deepEqual(dataset.rows.slice(0,41).map(row => row.reference), source.tracks[0].reference);
+  const old = referenceEvidence.variants.find(variant => variant.position === 128225994)!;
+  for (const mutate of [
+    (value: ServicePredictionResult) => { value.variant.position = old.position; },
+    (value: ServicePredictionResult) => { value.displayReference = old.displayReference; },
+    (value: ServicePredictionResult) => { value.referenceGenome.contextSha256 = old.contextSha256; },
+    (value: ServicePredictionResult) => { Object.assign(value.transformations[0], old.displayInterval); },
+    (value: ServicePredictionResult) => { value.tracks[0].start = old.displayInterval.start; },
+  ]) {
+    const changed = structuredClone(source); mutate(changed);
+    assert.throws(() => convertServiceResultToDataset(changed, artifact));
+  }
 });
 
 test("rejects changed reference, context, display crop and allele orientation", () => {
@@ -114,8 +149,11 @@ test("rejects mismatched tissue scope and inconsistent original metadata", () =>
   const cases: Array<(result: ServicePredictionResult) => void> = [
     result => { result.tracks[2].biosampleScope = "biosample_specific"; },
     result => { result.tracks[2].biosampleId = "CL:0000679"; },
+    result => { result.tracks[2].originalMetadata.ontology_curie = "CL:0000084"; },
+    result => { result.tracks[2].originalMetadata.biosample_name = "T-cell"; },
     result => { result.tracks[0].biosampleId = "CL:0000084"; },
     result => { result.tracks[0].originalMetadata.biosample_name = "T-cell"; },
+    result => { result.tracks[0].originalMetadata.biosample_name = "not glutamatergic neuron"; },
     result => { result.tracks[0].originalMetadata.ontology_curie = "CL:0000084"; },
     result => { result.tracks[0].originalMetadata.strand = "-"; },
     result => { result.tracks[0].unit = "invented units"; },
@@ -123,6 +161,17 @@ test("rejects mismatched tissue scope and inconsistent original metadata", () =>
     result => { result.tracks[2].name = "Padding"; result.tracks[2].originalMetadata.name = "Padding"; },
   ];
   for (const mutate of cases) { const result = syntheticResult(); mutate(result); assert.throws(() => convertServiceResultToDataset(result, artifact)); }
+});
+
+test("retains declared reference annotations without treating them as variant calibration", () => {
+  const source = syntheticResult();
+  source.annotationSettings.geneMasks = true;
+  source.annotationSettings.spliceJunctionAnnotations = true;
+  const parsed = parseServiceResultJSON(JSON.stringify(source));
+  assert.deepEqual(parsed.annotationSettings, source.annotationSettings);
+  assert.equal(convertServiceResultToDataset(parsed, artifact).rows.length, 123);
+  (source.annotationSettings as unknown as { variantCalibration: boolean }).variantCalibration = true;
+  assert.throws(() => convertServiceResultToDataset(source, artifact), /variantCalibration/);
 });
 
 test("rejects extra transformations instead of silently interpreting altered signals", () => {
