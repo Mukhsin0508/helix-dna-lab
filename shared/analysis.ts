@@ -97,6 +97,32 @@ export const trackRowSchema = z.object({
   track: boundedText(500),
 }).strict();
 
+/** A dataset represents one assay endpoint and one explicitly described condition aggregate. */
+export const experimentSchema = z.object({
+  assay: boundedText(500),
+  endpoint: boundedText(500),
+  unit: z.enum(["fraction", "percent", "count", "arbitrary"]),
+  unitLabel: boundedText(200),
+  aggregation: boundedText(1_000),
+  conditions: z.array(boundedText(500)).min(1).max(100),
+  replicatePolicy: boundedText(1_000),
+  sourceLocator: boundedText(1_000),
+}).strict();
+
+/** Reported observations, not model scores. Missing uncertainty is explicit, never inferred. */
+export const measurementRowSchema = z.object({
+  variant: variantSchema,
+  gene: boundedText(200).optional(),
+  value: z.number().finite(),
+  // Keep the original numerical spelling, including trailing zeroes or exponent notation.
+  reportedValue: z.string().min(1).max(200).refine(value => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()) && Number.isFinite(Number(value)), "Reported value must be finite numerical source text.").optional(),
+  replicates: safeIntegerSchema.refine(value => value > 0, "Replicate count must be a positive integer, or null when unknown.").nullable(),
+  standardError: z.number().finite().min(0).nullable(),
+  sourceRowIndex: safeIntegerSchema.optional(),
+}).strict().superRefine((row, context) => {
+  if (row.reportedValue !== undefined && Number(row.reportedValue) !== row.value) context.addIssue({ code: z.ZodIssueCode.custom, path: ["reportedValue"], message: "Reported numerical text must equal the unrounded measurement value." });
+});
+
 /** Optional original model metadata for each chromosome / displayed track key. */
 export const analysisTrackMetadataSchema = z.object({
   chromosome: chromosomeSchema,
@@ -132,6 +158,12 @@ export const trackDatasetSchema = z.object({
   rows: z.array(trackRowSchema).min(1).max(ANALYSIS_ROW_LIMIT),
   trackMetadata: z.array(analysisTrackMetadataSchema).min(1).max(ANALYSIS_ROW_LIMIT).optional(),
 }).strict();
+export const measurementDatasetSchema = z.object({
+  ...datasetBase,
+  kind: z.literal("measurements"),
+  experiment: experimentSchema,
+  rows: z.array(measurementRowSchema).min(1).max(ANALYSIS_ROW_LIMIT),
+}).strict();
 
 // UCSC primary hg38 chromosome sizes, verified 2026-09-11:
 // https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.chrom.sizes
@@ -145,11 +177,12 @@ const human38Lengths: Readonly<Record<string, number>> = {
   chrM: 16569,
 };
 
-export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetSchema, trackDatasetSchema])
+export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetSchema, trackDatasetSchema, measurementDatasetSchema])
   .superRefine((dataset, context) => {
     const hg38 = /^(?:GRCh38(?:\.p\d+)?(?:\/hg38)?|hg38)$/i.test(dataset.provenance.assembly);
     const seen = new Set<string>();
     const inference = dataset.provenance.inference;
+    if (dataset.kind === "measurements" && inference) context.addIssue({ code: z.ZodIssueCode.custom, path: ["provenance", "inference"], message: "Experimental measurements cannot carry model inference provenance." });
     if (inference && hg38) {
       for (const intervalName of ["inputInterval", "displayInterval"] as const) {
         const interval = inference[intervalName];
@@ -157,10 +190,10 @@ export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetS
       }
     }
     dataset.rows.forEach((row, index) => {
-      if (dataset.kind === "scores" && "variant" in row) {
+      if ("variant" in row) {
         const [chromosome, position] = row.variant.split(":");
         if (hg38 && Number(position) > human38Lengths[chromosome]) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "variant"], message: "Variant position exceeds this GRCh38 chromosome's length." });
-        if (inference && row.variant !== inference.variant) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "variant"], message: "Score row differs from the single variant recorded in inference provenance." });
+        if (dataset.kind === "scores" && inference && row.variant !== inference.variant) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "variant"], message: "Score row differs from the single variant recorded in inference provenance." });
       } else if ("position" in row) {
         if (hg38 && row.position >= human38Lengths[row.chromosome]) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "position"], message: "Zero-based track position exceeds this GRCh38 chromosome's length." });
         const key = JSON.stringify([row.chromosome, row.position, row.track]);
@@ -169,6 +202,15 @@ export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetS
         if (inference && (row.chromosome !== inference.displayInterval.chromosome || row.position < inference.displayInterval.start || row.position >= inference.displayInterval.end)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "position"], message: "Track row lies outside the recorded display interval." });
       }
     });
+    if (dataset.kind === "measurements") {
+      const variants = new Set<string>();
+      dataset.rows.forEach((row, index) => {
+        if (variants.has(row.variant)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "variant"], message: "Duplicate variant; use a separate dataset for another assay or condition aggregate." });
+        variants.add(row.variant);
+        const unit = dataset.experiment.unit;
+        if ((unit === "fraction" && (row.value < 0 || row.value > 1)) || (unit === "percent" && (row.value < 0 || row.value > 100)) || (unit === "count" && row.value < 0)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["rows", index, "value"], message: `Measurement value is outside the valid range for ${unit} units.` });
+      });
+    }
     if (dataset.kind === "tracks" && dataset.trackMetadata) {
       const metadataPairs = new Set<string>();
       dataset.trackMetadata.forEach((metadata, metadataIndex) => {
@@ -192,8 +234,11 @@ export const analysisDatasetSchema = z.discriminatedUnion("kind", [scoreDatasetS
 export type AnalysisDataset = z.infer<typeof analysisDatasetSchema>;
 export type ScoreDataset = z.infer<typeof scoreDatasetSchema>;
 export type TrackDataset = z.infer<typeof trackDatasetSchema>;
+export type MeasurementDataset = z.infer<typeof measurementDatasetSchema>;
 export type ScoreRow = z.infer<typeof scoreRowSchema>;
 export type TrackRow = z.infer<typeof trackRowSchema>;
+export type MeasurementRow = z.infer<typeof measurementRowSchema>;
+export type Experiment = z.infer<typeof experimentSchema>;
 export type AnalysisProvenance = z.infer<typeof analysisProvenanceSchema>;
 export type AnalysisTrackMetadata = z.infer<typeof analysisTrackMetadataSchema>;
 export type AnalysisInference = z.infer<typeof analysisInferenceSchema>;

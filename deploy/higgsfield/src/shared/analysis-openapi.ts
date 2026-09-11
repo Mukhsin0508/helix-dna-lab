@@ -13,7 +13,7 @@ const errors = {
 const body = (name: string) => ({ required: true, content: { 'application/json': { schema: { $ref: `#/components/schemas/${name}` } } } });
 
 export const analysisPaths = {
-  '/api/analyses': { post: { operationId: 'createAnalysis', summary: 'Save imported scores or genomic tracks with a figure recipe',
+  '/api/analyses': { post: { operationId: 'createAnalysis', summary: 'Save scores, genomic tracks or experimental measurements with a figure recipe',
     description: 'Stores supplied numerical results without running inference. Anyone with the returned link can view and edit it. Do not upload private genomic data.',
     requestBody: body('AnalysisInput'), responses: { '201': response, ...errors } } },
   '/api/analyses/{id}': {
@@ -60,18 +60,30 @@ export const analysisSchemas = {
     properties: { chromosome: string, track: string, outputType: string, unit: nullableString, strand: { enum: ['+', '-', '.', null] },
       biosampleId: nullableString, biosampleName: nullableString, scope: { enum: ['biosample_specific', 'tissue_agnostic', 'unspecified'], description: 'Tissue-agnostic tracks must have null biosample identifiers and names.' },
       binSize: { type: 'integer', minimum: 1 }, sourceName: string, sourceIndex: { type: 'integer', minimum: 0 } } },
-  AnalysisDataset: { oneOf: ['scores', 'tracks'].map(kind => ({ type: 'object', additionalProperties: false,
-    required: ['schemaVersion', 'id', 'title', 'kind', 'provenance', 'rows'],
+  AnalysisExperiment: { type: 'object', additionalProperties: false,
+    description: 'One comparable experimental assay and condition aggregate. These are measured values, not model predictions. Retain the reported aggregation and replicate policy.',
+    required: ['assay', 'endpoint', 'unit', 'unitLabel', 'aggregation', 'conditions', 'replicatePolicy', 'sourceLocator'],
+    properties: { assay: string, endpoint: string, unit: { enum: ['fraction', 'percent', 'count', 'arbitrary'] }, unitLabel: string,
+      aggregation: string, conditions: { type: 'array', minItems: 1, items: string }, replicatePolicy: string, sourceLocator: string } },
+  AnalysisMeasurementRow: { type: 'object', additionalProperties: false,
+    description: 'One measured value per exact variant. Fraction values must be 0–1; percentages 0–100; counts nonnegative. Null replicate count and standard error mean unavailable, never zero. Reported text must equal the numeric value.',
+    required: ['variant', 'value', 'replicates', 'standardError'],
+    properties: { variant: string, gene: string, value: { type: 'number' }, reportedValue: string,
+      replicates: { type: ['integer', 'null'], minimum: 1 }, standardError: { type: ['number', 'null'], minimum: 0 }, sourceRowIndex: { type: 'integer', minimum: 0 } } },
+  AnalysisDataset: { oneOf: ['scores', 'tracks', 'measurements'].map(kind => ({ type: 'object', additionalProperties: false,
+    required: ['schemaVersion', 'id', 'title', 'kind', 'provenance', 'rows', ...(kind === 'measurements' ? ['experiment'] : [])],
     properties: { schemaVersion: { const: 1 }, id: string, title: string, kind: { const: kind },
       provenance: { $ref: '#/components/schemas/AnalysisProvenance' },
       ...(kind === 'tracks' ? { trackMetadata: { type: 'array', maxItems: 5000, items: { $ref: '#/components/schemas/AnalysisTrackMetadata' } } } : {}),
-      rows: { type: 'array', minItems: 1, maxItems: 5000, items: { $ref: `#/components/schemas/Analysis${kind === 'scores' ? 'Score' : 'Track'}Row` } } } })) },
+      ...(kind === 'measurements' ? { experiment: { $ref: '#/components/schemas/AnalysisExperiment' } } : {}),
+      rows: { type: 'array', minItems: 1, maxItems: 5000, items: { $ref: `#/components/schemas/Analysis${kind === 'scores' ? 'Score' : kind === 'tracks' ? 'Track' : 'Measurement'}Row` } } } })) },
   FigureSettings: { type: 'object', additionalProperties: false,
     required: ['chart', 'title', 'modality', 'scorer', 'track', 'gene', 'metric', 'limit', 'variant'],
     properties: { chart: { enum: ['bars', 'heatmap', 'tracks', 'table'] }, title: string, modality: string, scorer: string, track: string,
       gene: string, metric: { enum: ['score', 'quantile'] }, limit: { type: 'integer', minimum: 1, maximum: 100 }, variant: string } },
   AnalysisInput: { type: 'object', additionalProperties: false, required: ['dataset', 'settings'], properties: {
-    dataset: { $ref: '#/components/schemas/AnalysisDataset' }, settings: { $ref: '#/components/schemas/FigureSettings' } } },
+    dataset: { $ref: '#/components/schemas/AnalysisDataset' }, settings: { $ref: '#/components/schemas/FigureSettings' } },
+    description: 'Experimental measurements support bars (dot plot) or table with the score metric used as the measured value; no model quantiles or inference provenance.' },
   AnalysisPatch: { type: 'object', additionalProperties: false, required: ['revision', 'dataset', 'settings'], properties: {
     revision: { type: 'integer', minimum: 0 }, dataset: { $ref: '#/components/schemas/AnalysisDataset' }, settings: { $ref: '#/components/schemas/FigureSettings' } } },
   Analysis: { type: 'object', required: ['id', 'revision', 'dataset', 'settings', 'createdAt', 'updatedAt'], properties: {

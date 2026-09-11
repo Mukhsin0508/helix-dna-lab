@@ -1,0 +1,28 @@
+Table S4 | Table of prospective in-frame exon extension variants affectingDNM1 exon 10a. Notably, the 3’ splice site selection rate is important
+to consider in evaluating the possibility of dominant negative effect.
+Variant ID Alt 3SS rate Extra Exon Added Amino Acids Extra AA Status
+chr9:128226027:G>A 0.94 6 bp CR 2 AA ( 39)
+chr9:128226009:T>A 0.78 24 bp SPHLLPGC 8 AA Prospective
+chr9:128225997:T>A 0.69 36 bp SSSSCPHLLPGC 12 AA Prospective
+chr9:128225994:G>A 0.76 39 bp SCSSSCPHLLPGC 13 AA ( 36, 37)
+chr9:128225989:C>G 0.79 45 bp SHGCSSSCPHLLPGC 15 AA ( 38)
+chr9:128225964:G>A 0.22 69 bp SFHPLLLPTHGCSSSCPHLLPGC 23 AA Prospective
+chr9:128225946:G>A 0.60 87 bp FLSLLGFHPLLLPTHGCSSSCPHLLP
+GCR
+29 AA Prospective
+chr9:128225941:C>G 0.84 93 bp SPGFLSLLGFHPLLLPTHGCSSSCPH
+LLPGC
+31 AA Prospective
+chr9:128225932:T>G 0.18 102 bp SLSTPGFLSLLGFHPLLLPTHGCSSS
+CPHLLPGC
+34 AA Prospective
+chr9:128225925:C>A 0.16 108 bp SAILSTPGFLSLLGFHPLLLPTHGCS
+SSCPHLLPGC
+36 AA Prospective
+chr9:128225919:C>A 0.52 114 bp SARAILSTPGFLSLLGFHPLLLPTHG
+CSSSCPHLLPGC
+38 AA Prospective
+chr9:128225898:C>A 0.53 135 bp CLSLFPRARAILSTPGFLSLLGFHPL
+LLPTHGCSSSCPHLLPGCR
+45 AA Prospective
+73

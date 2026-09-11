@@ -1,7 +1,9 @@
-import { scoreDatasetSchema, type AnalysisDataset, type AnalysisProvenance, type AnalysisTrackMetadata, type ScoreDataset, type ScoreRow, type TrackRow } from '../shared/analysis';
+import { scoreDatasetSchema, analysisDatasetSchema, type AnalysisDataset, type AnalysisProvenance, type AnalysisTrackMetadata, type MeasurementDataset, type MeasurementRow, type ScoreDataset, type ScoreRow, type TrackRow } from '../shared/analysis';
 import type { FigureSettings } from '../shared/analysis-record';
 import publishedRows from '../data/atlas/published-tcell-scores.normalized.json';
 import publishedProvenance from '../data/atlas/published-tcell-scores.provenance.json';
+import dnm1Measurements from '../data/experimental/dnm1-table-s4.measurements.json';
+import dnm1Provenance from '../data/experimental/dnm1-table-s4.provenance.json';
 
 export const PUBLISHED_PROVENANCE = publishedProvenance;
 export const DEFAULT_DATASET: ScoreDataset = scoreDatasetSchema.parse({
@@ -20,16 +22,39 @@ export const DEFAULT_DATASET: ScoreDataset = scoreDatasetSchema.parse({
   },
   rows: publishedRows,
 });
+export const DNM1_MEASUREMENT_SOURCE = dnm1Provenance;
+export const DNM1_MEASUREMENTS = analysisDatasetSchema.parse({
+  schemaVersion: 1, id: dnm1Measurements.id, title: 'DNM1 · measured splicing rates', kind: 'measurements',
+  provenance: {
+    sourceUrl: dnm1Measurements.sourceUrl, sourceLabel: 'AlphaGenome Atlas paper · Table S4', assembly: dnm1Measurements.assembly,
+    model: 'Not applicable', mode: 'published-example',
+    context: `${dnm1Measurements.selection} ${dnm1Measurements.sourcePrecision} Experimental measurements only; no matched model predictions.`,
+    artifact: { filename: 'alphagenome-atlas.pdf', sha256: dnm1Provenance.sourceSha256 },
+  },
+  experiment: {
+    assay: dnm1Measurements.assay, endpoint: dnm1Measurements.measurement, unit: 'fraction', unitLabel: 'Alternative 3′ splice-site selection rate',
+    aggregation: 'mean_of_condition_means', conditions: ['Aggregate across five retained cell-line/promoter combinations; individual conditions not specified in Table S4'],
+    replicatePolicy: dnm1Provenance.replicateUncertainty, sourceLocator: 'Table S4 · page 73; Figure 3D · page 9; quantification methods · page 44',
+  },
+  rows: dnm1Measurements.rows.map(row => ({ variant: row.variant, gene: row.gene, value: row.alt3ssRate, reportedValue: row.alt3ssRateReportedText, replicates: row.validReplicateCount, standardError: row.standardError, sourceRowIndex: row.sourceRow })),
+}) as MeasurementDataset;
 
 /** A raw-score series is a single method, track, strand and unit. */
 export function comparisonKey(row: ScoreRow): string {
   return JSON.stringify([row.modality, row.scorer, row.track || '', row.trackStrand || '', row.unit || '', row.signed ?? null]);
 }
 export function defaultSettings(dataset: AnalysisDataset): FigureSettings {
+  if (dataset.kind === 'measurements') return { chart: 'bars', title: dataset.experiment.unit === 'fraction' || dataset.experiment.unit === 'percent' ? 'Measured experimental rate' : 'Measured experimental value', modality: '', scorer: '', track: '', gene: '', metric: 'score', limit: 12, variant: '' };
   const first = dataset.kind === 'scores' ? dataset.rows.find(row => row.modality === 'ATAC') || dataset.rows[0] : undefined;
   return { chart: dataset.kind === 'scores' ? 'bars' : 'tracks', title: dataset.kind === 'scores' ? 'Predicted variant effects' : 'Reference and alternate signal',
     modality: first?.modality || '', scorer: first?.scorer || '', track: first ? comparisonKey(first) : '', gene: '', metric: 'score', limit: 12, variant: '' };
 }
+/** Preserve source order and experimental values; never manufacture model scores. */
+export function matchingMeasurements(dataset: AnalysisDataset, settings: FigureSettings): MeasurementRow[] {
+  return dataset.kind === 'measurements' ? dataset.rows.filter(row => (!settings.gene || row.gene === settings.gene) && (!settings.variant || row.variant === settings.variant)) : [];
+}
+export function measurementValue(row: MeasurementRow): string { return row.reportedValue ?? formatScore(row.value, 7); }
+export function measurementAggregation(dataset: MeasurementDataset): string { return dataset.experiment.aggregation === 'mean_of_condition_means' ? 'Mean of condition means' : dataset.experiment.aggregation.replaceAll('_', ' '); }
 export function distinct(values: string[]): string[] { return [...new Set(values)].sort((a, b) => a.localeCompare(b)); }
 export function scoreValue(row: ScoreRow, metric: FigureSettings['metric']): number | undefined { return metric === 'quantile' ? row.quantile : row.score; }
 export function matchingRows(dataset: AnalysisDataset, settings: FigureSettings): ScoreRow[] {
@@ -71,7 +96,7 @@ export function csvForRows(rows: ScoreRow[]): string {
   const cell = (value: unknown): string => value === undefined ? '' : `"${String(value).replaceAll('"', '""')}"`;
   return [columns.join(','), ...rows.map(row => columns.map(column => cell(row[column])).join(','))].join('\n');
 }
-export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', filename: string, metadata?: { title: string; source: string; sourceUrl: string; assembly: string; status: string; provenance?: AnalysisProvenance; settings?: FigureSettings; tracks?: Array<{ chromosome: string; track: string; metadata: AnalysisTrackMetadata | null }> }): Promise<void> {
+export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', filename: string, metadata?: { title: string; source: string; sourceUrl: string; assembly: string; status: string; provenance?: AnalysisProvenance; settings?: FigureSettings; experiment?: MeasurementDataset['experiment']; tracks?: Array<{ chromosome: string; track: string; metadata: AnalysisTrackMetadata | null }> }): Promise<void> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const view = svg.viewBox.baseVal;
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', String(view.width)); clone.setAttribute('height', String(view.height));

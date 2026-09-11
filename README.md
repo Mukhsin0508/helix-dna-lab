@@ -25,19 +25,24 @@ After building, `npm start` serves the compiled frontend and API together at **h
 
 ## Analytical workflow
 
-- Start from 524 real score rows extracted from Google's published AlphaGenome batch notebook, or import a CSV/JSON result.
+- Start from 524 real score rows extracted from Google's published AlphaGenome batch notebook, open the 12 published DNM1 measurements, or import a CSV/JSON result.
 - Filter the variant, modality, exact scorer, track and gene. Compare only compatible scoring methods and units.
 - Generate signed bars, a comparison heatmap, a result table or aligned reference/alternate signal tracks from an imported track dataset.
+- Experimental datasets have their own measured-value dot plot and table. Assay, aggregation, conditions and unknown replicate counts remain explicit; they cannot be switched to model quantiles.
 - Export the figure as SVG/PNG, the data as CSV, and the complete analysis recipe as JSON.
 - Save the dataset and settings in SQLite or D1. Reload or share the saved analysis with optimistic revision checks to prevent overwriting another edit.
 
-The bundled data is a **historical published model-output example** with an upstream notebook execution timestamp of July 21, 2025. It includes four variants and T-cell tracks. Its model version was not recorded. It is not a fresh Atlas query, AVI data, the user's requested DNM1 variant, or genomic track arrays. See [source artifacts and provenance](data/atlas/README.md).
+The T-cell dataset is a **historical published model-output example** with an upstream notebook execution timestamp of July 21, 2025. It includes four variants and T-cell tracks. Its model version was not recorded. It is not a fresh Atlas query, AVI data, the user's requested DNM1 variant, or genomic track arrays. See [source artifacts and provenance](data/atlas/README.md).
+
+The separate **experimental DNM1 dataset** contains the 12 selected variants in Table S4 of the official Atlas technical report. It includes `chr9:128226027:G>A`, with a reported mean alternative splice-site rate of 0.94, and the distinct `chr9:128225994:G>A`, with 0.76. These minigene-assay averages combine five retained cell-line/promoter conditions. They are not glutamatergic-neuron model predictions. Per-row replicate counts and uncertainty are unavailable and remain null. The selected rows do not establish model accuracy or represent the full screen. See [benchmark feasibility and sources](docs/dnm1-benchmark-feasibility.md).
 
 ## Data and interpretation
 
 Scores are molecular predictions in scorer-specific units. Signed empirical quantiles are not disease probabilities or AVI PHRED. Missing heatmap cells mean no supplied result; they are not zero. Importing or filtering data does not execute a biological model.
 
 SNV identifiers use one-based positions, for example `chr9:128226027:G>A`. Imported track positions are zero-based; reference/alternate fields are numeric signals. An explicit genome assembly is required. Input validation checks syntax and known GRCh38 bounds, not whether a reference allele matches the genome.
+
+Measurement JSON uses `kind: "measurements"`, a shared `experiment` context, and rows containing `variant`, `value`, `replicates` and `standardError`. Unknown replicate count or standard error must be `null`. Optional `reportedValue` preserves the source's numeric spelling, such as `0.60`. Measurement exports include both fields; JSON retains the complete assay metadata. One dataset represents a single comparable endpoint/condition aggregate.
 
 Higgsfield-generated imagery is not part of the analytical interface. Earlier illustrative cell/replay components and their session APIs remain in the repository for compatibility; the active product is the figure workspace.
 

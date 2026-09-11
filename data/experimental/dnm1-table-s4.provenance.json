@@ -1,0 +1,40 @@
+{
+  "verifiedAt": "2026-09-11T00:45:34.891420+00:00",
+  "sourceUrl": "https://storage.googleapis.com/deepmind-media/DeepMind.com/Blog/alphagenome-atlas-a-predictive-map-of-every-possible-dna-letter-change-in-the-human-genome/alphagenome-atlas.pdf",
+  "sourceSha256": "07011853872613cb7bd3ce8ca62cd2621ad50b0a16e6f5dec3e480b3d190af2c",
+  "sourceBytes": 14647436,
+  "sourceTotalPages": 83,
+  "sourcePage1Based": 73,
+  "sourceLaunchDate": "2026-09-08",
+  "sourceLaunchUrl": "https://deepmind.google/blog/alphagenome-atlas-a-predictive-map-of-every-possible-dna-letter-change-in-the-human-genome/",
+  "extraction": "pypdf text extraction; wrapped residue sequences concatenated; table rows visually compared with a Poppler-rendered page. No plotted values digitized or model outputs computed.",
+  "coordinateBasis": "Paper uses hg38/GRCh38; exact chr:position:REF>ALT identifiers copied from Table S4. Reference alleles not independently re-fetched for this transcription.",
+  "measurementBasis": "Table S4 p73, Figure 3D caption p9, and alternative-splicing quantification methods p44.",
+  "measurementAggregation": "Each row is a published mean: valid biological replicates averaged within each retained condition, then condition means averaged across five retained cell-line/promoter combinations. This is not one pooled read-count fraction or a single-neuron measurement.",
+  "replicateUncertainty": "Three biological replicates per condition were planned and at least two valid replicates per retained element were required. Actual per-row and per-condition n, replicate values and uncertainty are not reported in Table S4; null means unavailable, not zero.",
+  "licenseStatus": "Source attribution retained. A dataset-specific license for this experimental table was not established; the separate static AVI artifact license is not assigned to these measurements.",
+  "missing": [
+    "Data S1 raw replicate values",
+    "Per-row valid replicate counts",
+    "Per-row uncertainty",
+    "Matched numerical model predictions"
+  ],
+  "files": {
+    "dnm1-table-s4.source.txt": {
+      "bytes": 1156,
+      "sha256": "89f1e10e6e7fe120da0351dde65dfc06563ab689c899bac21184f2fa5597badc"
+    },
+    "dnm1-table-s4.measurements.json": {
+      "bytes": 9900,
+      "sha256": "4411a8ae278a4abd2097f048a799ebd116cb3d29ee7725dc8928efb6422f4910"
+    },
+    "dnm1-table-s4.measurements.csv": {
+      "bytes": 1945,
+      "sha256": "19459093d856e804285769734adeace58ff8e1d01dc0579c64618cc39417ed71"
+    },
+    "dnm1-table-s4.source-page.png": {
+      "bytes": 142519,
+      "sha256": "72cc898d678ec7be2ff06cd41542807f40911e309889b837830b1cd1209ba740"
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type Ref } from 'react';
 import type { AnalysisDataset, ScoreRow } from '../../shared/analysis';
 import type { FigureSettings } from '../../shared/analysis-record';
 import { binnedSignalPath, featureKey, featureLabel, formatScore, matchingRows, rankedRows, rowLabel, scoreValue, signalMetadataLabel, signalUnit, trackGroups, unitLabel } from '../analysisUtils';
+import MeasurementFigure from './MeasurementFigure';
 
 const INK = '#506581', GRID = '#e8edf4', BLUE = '#365fd7', CORAL = '#d56b61', MONO = 'IBM Plex Mono, ui-monospace, monospace';
 interface Props { dataset: AnalysisDataset; settings: FigureSettings; svgRef: Ref<SVGSVGElement>; onSelect: (row: ScoreRow | null) => void }
@@ -29,6 +30,7 @@ export default function AnalysisFigure({ dataset, settings, svgRef, onSelect }: 
   const width = Math.round(measured), mobile = width < 570;
   const matching = matchingRows(dataset, settings);
   const ranked = rankedRows(dataset, settings);
+  if (dataset.kind === 'measurements') return <div ref={wrapper}><MeasurementFigure dataset={dataset} settings={settings} width={width} svgRef={svgRef}/></div>;
   if (dataset.kind === 'tracks') {
     const groups = trackGroups(dataset.rows, dataset.trackMetadata).filter(group => !settings.track || group.key === settings.track).slice(0, settings.limit);
     const left = mobile ? 49 : 75, right = width - 32, labelWidth = right - left;

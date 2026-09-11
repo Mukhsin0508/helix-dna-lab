@@ -15,13 +15,20 @@ export const figureSettingsSchema = z.object({
   variant: z.string().max(200),
 }).strict();
 
-export const analysisCreateSchema = z.object({
+const analysisInputSchema = z.object({
   dataset: analysisDatasetSchema,
   settings: figureSettingsSchema,
 }).strict();
-export const analysisPatchSchema = analysisCreateSchema.extend({
+/** Experimental endpoints never acquire model quantiles or genomic coverage through a chart setting. */
+function validateFigureKind(input: z.infer<typeof analysisInputSchema>, context: z.RefinementCtx): void {
+  if (input.dataset.kind !== 'measurements') return;
+  if (!['bars', 'table'].includes(input.settings.chart)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['settings', 'chart'], message: 'Experimental measurements support a dot plot or data table.' });
+  if (input.settings.metric !== 'score') context.addIssue({ code: z.ZodIssueCode.custom, path: ['settings', 'metric'], message: 'Experimental measurements have measured values, not model quantile scores.' });
+}
+export const analysisCreateSchema = analysisInputSchema.superRefine(validateFigureKind);
+export const analysisPatchSchema = analysisInputSchema.extend({
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-});
+}).superRefine(validateFigureKind);
 export type FigureSettings = z.infer<typeof figureSettingsSchema>;
 export type AnalysisInput = z.infer<typeof analysisCreateSchema>;
 export type AnalysisRecord = AnalysisInput & {

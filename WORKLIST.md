@@ -12,7 +12,8 @@ The owner selected data-driven analytical tools using AlphaGenome Atlas as the r
 - [x] Deploy and verify this analytical version publicly, including saved figure settings restored from D1.
 - [x] Add a metadata-preserving GPU service-result import bridge with a checksummed raw artifact, exact REF/ALT bins, tissue scope and source-reported inference provenance. A completed real service result is still required; this bridge does not execute or connect a model.
 - [ ] Connect live Atlas lookup or an authorized AlphaGenome service, with job status and recorded model version.
-- [ ] Add compatible experimental-result imports and prediction-versus-measurement analysis.
+- [x] Add typed experimental-measurement JSON imports and a source-backed DNM1 Table S4 plot, preserving printed values and missing uncertainty.
+- [ ] Add prediction-versus-measurement analysis once matching predictions, endpoints and assay contexts are available.
 - [ ] Validate utility with a research workflow and held-out measurements.
 - [ ] Add account ownership before accepting private genomic results or paid model execution.
 - [ ] Expose the analytical tools through AllMCP to ChatGPT and Claude.

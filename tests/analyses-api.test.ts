@@ -7,7 +7,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import test from 'node:test';
 import { createApp } from '../server/app.ts';
 import { AnalysisStore } from '../server/analyses.ts';
-import type { ScoreDataset, TrackDataset } from '../shared/analysis.ts';
+import type { MeasurementDataset, ScoreDataset, TrackDataset } from '../shared/analysis.ts';
 import { ANALYSIS_BODY_LIMIT, type AnalysisInput, type AnalysisRecord } from '../shared/analysis-record.ts';
 
 const migration = readFileSync(new URL('../deploy/higgsfield/migrations/0002_helix.sql', import.meta.url), 'utf8');
@@ -73,6 +73,45 @@ for (const kind of ['local', 'cloud'] as const) {
       const specification = await (await store.call('/api/openapi.json')).json() as { components: { schemas: Record<string, { properties?: Record<string, unknown> }> } };
       assert.ok(specification.components.schemas.AnalysisProvenance.properties?.inference);
       assert.ok(specification.components.schemas.AnalysisTrackMetadata.properties?.binSize);
+    } finally { await store.close(); }
+  });
+}
+
+for (const kind of ['local', 'cloud'] as const) {
+  test(`${kind}: published experimental means remain measurements through save and reload`, async () => {
+    const store = await harness(kind);
+    try {
+      const source = JSON.parse(readFileSync(new URL('../data/experimental/dnm1-table-s4.measurements.json', import.meta.url), 'utf8'));
+      const dataset: MeasurementDataset = {
+        schemaVersion: 1, id: 'dnm1-measurement-api-check', title: 'DNM1 measured splicing', kind: 'measurements',
+        provenance: { sourceUrl: source.sourceUrl, sourceLabel: 'AlphaGenome Atlas · Table S4', assembly: 'GRCh38', model: 'Not applicable',
+          context: source.selection, mode: 'published-example' },
+        experiment: { assay: source.assay, endpoint: source.measurement, unit: 'fraction', unitLabel: 'Alternative 3-prime splice-site selection rate',
+          aggregation: source.aggregation, conditions: ['Five retained cell-line/promoter combinations'],
+          replicatePolicy: 'Per-row replicate count and standard error not reported.', sourceLocator: 'Table S4, page 73' },
+        rows: source.rows.map((row: { variant: string; gene: string; alt3ssRate: number; alt3ssRateReportedText: string; sourceRow: number }) => ({
+          variant: row.variant, gene: row.gene, value: row.alt3ssRate, reportedValue: row.alt3ssRateReportedText,
+          replicates: null, standardError: null, sourceRowIndex: row.sourceRow,
+        })),
+      };
+      const settings = { ...input().settings, chart: 'bars' as const, metric: 'score' as const, track: '', gene: '', variant: 'chr9:128226027:G>A' };
+      const created = await analysisOf(await store.call('/api/analyses', 'POST', { dataset, settings }), 201);
+      const restored = await analysisOf(await store.call(`/api/analyses/${created.id}`));
+      assert.deepEqual(restored.dataset, dataset);
+      assert.equal(restored.settings.variant, 'chr9:128226027:G>A');
+      assert.equal(restored.dataset.kind, 'measurements');
+      if (restored.dataset.kind !== 'measurements') throw new Error('Lost measurement kind');
+      assert.equal(restored.dataset.rows.find(row => row.variant === 'chr9:128226027:G>A')?.value, 0.94);
+      assert.equal(restored.dataset.rows.find(row => row.variant === 'chr9:128225994:G>A')?.value, 0.76);
+      assert.ok(restored.dataset.rows.every(row => row.replicates === null && row.standardError === null));
+      assert.equal(restored.dataset.provenance.inference, undefined);
+      for (const invalidSettings of [{ ...settings, metric: 'quantile' }, { ...settings, chart: 'heatmap' }, { ...settings, chart: 'tracks' }]) {
+        assert.equal((await store.call('/api/analyses', 'POST', { dataset, settings: invalidSettings })).status, 400);
+        assert.equal((await store.call(`/api/analyses/${created.id}`, 'PATCH', { dataset, settings: invalidSettings, revision: created.revision })).status, 400);
+      }
+      const specification = await (await store.call('/api/openapi.json')).json() as { components: { schemas: Record<string, unknown> } };
+      assert.ok(specification.components.schemas.AnalysisExperiment);
+      assert.ok(specification.components.schemas.AnalysisMeasurementRow);
     } finally { await store.close(); }
   });
 }
