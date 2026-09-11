@@ -86,10 +86,12 @@ export function scorerLabel(value: string): string {
 }
 export function trackLabel(row: ScoreRow): string { return `${row.track || row.biosample || 'Unspecified track'}${row.trackStrand && row.trackStrand !== '.' ? ` · ${row.trackStrand} strand` : ''}`; }
 export function unitLabel(rows: ScoreRow[], settings: FigureSettings): string { return settings.metric === 'quantile' ? 'Signed quantile score' : rows[0]?.unit || 'Raw score · unit not supplied'; }
-export function downloadFile(content: string | Blob, name: string, type = 'text/plain;charset=utf-8'): void {
+export function downloadFile(content: string | Blob, name: string, type = 'text/plain;charset=utf-8', signal?: AbortSignal): void {
+  signal?.throwIfAborted();
   const blob = typeof content === 'string' ? new Blob([content], { type }) : content;
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a'); link.href = url; link.download = name; link.click();
+  const link = document.createElement('a'); link.href = url; link.download = name;
+  try { signal?.throwIfAborted(); link.click(); } catch (cause) { URL.revokeObjectURL(url); throw cause; }
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export function csvForRows(rows: ScoreRow[]): string {
@@ -97,7 +99,8 @@ export function csvForRows(rows: ScoreRow[]): string {
   const cell = (value: unknown): string => value === undefined ? '' : `"${String(value).replaceAll('"', '""')}"`;
   return [columns.join(','), ...rows.map(row => columns.map(column => cell(row[column])).join(','))].join('\n');
 }
-export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', filename: string, metadata?: { title: string; source: string; sourceUrl: string; assembly: string; status: string; provenance?: AnalysisProvenance; settings?: FigureSettings; experiment?: MeasurementDataset['experiment']; junctions?: Pick<JunctionDataset, 'interval' | 'variant' | 'rows' | 'trackMetadata'>; tracks?: Array<{ chromosome: string; track: string; metadata: AnalysisTrackMetadata | null }> }): Promise<void> {
+export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', filename: string, metadata?: { title: string; source: string; sourceUrl: string; assembly: string; status: string; provenance?: AnalysisProvenance; settings?: FigureSettings; experiment?: MeasurementDataset['experiment']; junctions?: Pick<JunctionDataset, 'interval' | 'variant' | 'rows' | 'trackMetadata'>; tracks?: Array<{ chromosome: string; track: string; metadata: AnalysisTrackMetadata | null }> }, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const view = svg.viewBox.baseVal;
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', String(view.width)); clone.setAttribute('height', String(view.height));
@@ -115,16 +118,25 @@ export async function exportFigure(svg: SVGSVGElement, kind: 'svg' | 'png', file
     const meta = document.createElementNS(namespace, 'metadata'); meta.textContent = JSON.stringify(metadata); clone.appendChild(meta);
   }
   const serialized = new XMLSerializer().serializeToString(clone);
-  if (kind === 'svg') { downloadFile(serialized, `${filename}.svg`, 'image/svg+xml'); return; }
+  if (kind === 'svg') { downloadFile(serialized, `${filename}.svg`, 'image/svg+xml', signal); return; }
   const url = URL.createObjectURL(new Blob([serialized], { type: 'image/svg+xml' }));
   try {
     const img = new Image();
-    await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error('The figure could not be rendered. Try SVG export.')); img.src = url; });
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = (): void => { img.onload = null; img.onerror = null; signal?.removeEventListener('abort', abort); };
+      const abort = (): void => { cleanup(); img.src = ''; reject(new DOMException('Export cancelled because the account changed.', 'AbortError')); };
+      img.onload = () => { cleanup(); resolve(); };
+      img.onerror = () => { cleanup(); reject(new Error('The figure could not be rendered. Try SVG export.')); };
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) abort(); else img.src = url;
+    });
+    signal?.throwIfAborted();
     const canvas = document.createElement('canvas'); canvas.width = view.width * 2; canvas.height = (view.height + (metadata ? 130 : 0)) * 2;
     const context = canvas.getContext('2d'); if (!context) throw new Error('PNG export is unavailable. Use SVG instead.');
     context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(img, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('PNG export failed.')), 'image/png'));
-    downloadFile(blob, `${filename}.png`);
+    signal?.throwIfAborted();
+    downloadFile(blob, `${filename}.png`, 'image/png', signal);
   } finally { URL.revokeObjectURL(url); }
 }
 export function importProvenance(assembly: string, sourceUrl: string, sourceLabel: string): AnalysisProvenance {

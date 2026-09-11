@@ -12,3 +12,4 @@ __pycache__/
 !.env.example
 qa-analysis/
 qa-junctions/
+qa-accounts/

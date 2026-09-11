@@ -1,0 +1,92 @@
+import assert from 'node:assert/strict';
+import { chromium } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { installPasskey, registerInDialog } from './browser-passkey-helper.mjs';
+const base = process.env.HELIX_QA_URL || 'http://localhost:4190';
+const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+const checks = [], errors = [];
+const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
+const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
+await installPasskey(context, page);
+async function accountMenu(target = page) { await target.getByRole('button', { name: 'Account: Helix UI QA', exact: true }).click(); }
+async function logout(target = page) { await accountMenu(target); await target.getByRole('button', { name: 'Sign out', exact: true }).click(); await target.getByRole('button', { name: 'Sign in', exact: true }).waitFor(); }
+const privateTitle = 'PRIVATE QA iteration 73';
+try {
+  await page.goto(base); await page.getByRole('textbox', { name: 'Figure title' }).fill(privateTitle);
+  await page.getByRole('button', { name: 'Save analysis', exact: true }).click();
+  await registerInDialog(page, 'Helix UI QA');
+  await page.getByText('Analysis saved privately', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Figure title' }).inputValue(), privateTitle);
+  const id = new URL(page.url()).searchParams.get('analysis'); assert.ok(id);
+  checks.push('Anonymous figure transfers only through explicit sign-in-and-save');
+  await accountMenu(); await page.getByRole('button', { name: 'My analyses', exact: true }).click();
+  const list = page.getByRole('dialog', { name: 'My analyses', exact: true });
+  await list.getByText(privateTitle, { exact: true }).waitFor();
+  await list.getByRole('button', { name: `Open ${privateTitle}`, exact: true }).click(); await list.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Copy analysis link' }).click();
+  await page.getByText('This analysis is private.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  const stored = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } }));
+  assert.ok(!JSON.stringify(stored).includes(privateTitle)); assert.ok(!JSON.stringify(stored).includes('rows'));
+  checks.push('My analyses opens the saved recipe; private links and browser storage preserve ownership');
+  const second = await context.newPage(); await second.goto(`${base}/?analysis=${id}`);
+  await second.waitForFunction(title => document.querySelector('input[aria-label="Figure title"]')?.value === title, privateTitle);
+  await mkdir('qa-accounts', { recursive: true }); await page.screenshot({ path: 'qa-accounts/workspace-desktop.png', fullPage: true });
+  // The PNG has rendered, but its asynchronous download is deliberately held across logout.
+  await page.evaluate(() => { const original = HTMLCanvasElement.prototype.toBlob; HTMLCanvasElement.prototype.toBlob = function(callback, ...args) { window.helixReleasePng = () => original.call(this, callback, ...args); }; });
+  let downloads = 0; page.on('download', () => { downloads += 1; });
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('button', { name: 'High-resolution figure' }).click();
+  await page.waitForFunction(() => Boolean(window.helixReleasePng));
+  await logout(second);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor();
+  assert.notEqual(await page.getByRole('textbox', { name: 'Figure title' }).inputValue(), privateTitle);
+  await page.evaluate(() => window.helixReleasePng());
+  await page.waitForTimeout(250); assert.equal(downloads, 0);
+  checks.push('Cross-tab logout removes private figure state and cancels a pending PNG download');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign in with passkey', exact: true }).click();
+  await page.getByRole('button', { name: 'Account: Helix UI QA', exact: true }).waitFor();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await second.getByRole('button', { name: 'Account: Helix UI QA', exact: true }).waitFor();
+  checks.push('Real passkey login restores identity in both tabs');
+  let release, started;
+  const held = new Promise(resolve => { release = resolve; });
+  const loading = new Promise(resolve => { started = resolve; });
+  await page.route(`**/api/analyses/${id}`, async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch(); started(); await held;
+    try { await route.fulfill({ response }); } catch { /* A cancelled navigation must not restore data. */ }
+  });
+  await page.goto(`${base}/?analysis=${id}`, { waitUntil: 'domcontentloaded' }); await loading;
+  await logout(second); release();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor();
+  assert.notEqual(await page.getByRole('textbox', { name: 'Figure title' }).inputValue(), privateTitle);
+  assert.ok(!(await page.locator('body').innerText()).includes(privateTitle));
+  checks.push('A delayed private analysis response cannot restore content after logout');
+  await page.unroute(`**/api/analyses/${id}`);
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto(base);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Sign in', exact: true }).waitFor();
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.keyboard.press('Tab');
+  assert.ok(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))));
+  await page.screenshot({ path: 'qa-accounts/signin-mobile.png', fullPage: true });
+  await page.keyboard.press('Escape'); await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  checks.push('Mobile sign-in fits the viewport and supports keyboard focus and Escape');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign in with passkey', exact: true }).click();
+  await page.getByRole('button', { name: 'Account: Helix UI QA', exact: true }).waitFor();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await accountMenu(); await page.getByRole('button', { name: 'My analyses', exact: true }).click();
+  await page.getByRole('button', { name: `Delete ${privateTitle}`, exact: true }).click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByText('No saved analyses yet.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await logout();
+  checks.push('Owner deletion works on mobile and removes the private QA record');
+  assert.deepEqual(errors, []);
+  await writeFile('qa-accounts/ui-browser.json', JSON.stringify({ base, checks, errors }, null, 2));
+  console.log(JSON.stringify({ base, checks, errors }, null, 2));
+} catch (error) { await page.screenshot({ path: '/tmp/helix-account-ui-failure.png', fullPage: true }); throw error; }
+finally { await context.close(); await browser.close(); }

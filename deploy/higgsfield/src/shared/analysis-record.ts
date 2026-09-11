@@ -41,6 +41,14 @@ export type AnalysisRecord = AnalysisInput & {
   createdAt: string;
   updatedAt: string;
 };
+/** Access is supplied by the server and never accepted as part of scientific input. */
+export type AnalysisAccess = { mode: 'owner' | 'legacy-public'; canWrite: boolean };
+export type AnalysisEnvelope = { analysis: AnalysisRecord; access: AnalysisAccess };
+export type AnalysisSummary = {
+  id: string; title: string; kind: AnalysisInput['dataset']['kind']; revision: number; updatedAt: string;
+};
+export type AnalysisList = { analyses: AnalysisSummary[]; nextCursor: string | null };
+export const analysisDeleteSchema = z.object({ revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict();
 
 /** Create a saved analysis. Data and figure settings are stored together, without recomputing scores. */
 export function newAnalysis(input: AnalysisInput, id: string): AnalysisRecord {

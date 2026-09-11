@@ -1,3 +1,4 @@
+import { installPasskey, registerInDialog } from './browser-passkey-helper.mjs';
 import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -47,7 +48,8 @@ try {
   await page.getByRole('textbox', { name: 'Figure title' }).fill('Synthetic verification · RNA junctions');
   if (saveAllowed) {
     await page.getByRole('button', { name: 'Save analysis', exact: true }).click();
-    await page.getByText('Analysis saved', { exact: true }).waitFor();
+    await installPasskey(context,page); await registerInDialog(page,'Helix junction QA');
+    await page.getByText('Analysis saved privately', { exact: true }).waitFor();
     const id = new URL(page.url()).searchParams.get('analysis'); assert.ok(id);
     const saved = await (await page.request.get(`${base}/api/analyses/${id}`)).json();
     assert.deepEqual(saved.analysis.dataset.rows, dataset.rows);

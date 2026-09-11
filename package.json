@@ -10,10 +10,13 @@
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "node tests/browser-analyses.mjs",
     "test:junction-browser": "node tests/browser-junctions.mjs",
-    "import:gpu-result": "tsx inference/import-service-result.ts"
+    "import:gpu-result": "tsx inference/import-service-result.ts",
+    "test:accounts": "node tests/browser-accounts.mjs && node tests/browser-account-ui.mjs"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.1",
     "fastify": "^5.4.0",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",

@@ -1,3 +1,4 @@
+import { accountPaths, accountSecuritySchemes } from "../shared/account-openapi.ts";
 import { analysisPaths, analysisSchemas } from "../shared/analysis-openapi.ts";
 import { workspacePaths, workspaceSchemas } from "../shared/workbench-openapi.ts";
 
@@ -66,6 +67,7 @@ export const openApiDocument = {
   paths: {
     ...workspacePaths,
     ...analysisPaths,
+    ...accountPaths,
     "/api/health": {
       get: {
         operationId: "getHealth",
@@ -257,6 +259,7 @@ export const openApiDocument = {
     },
   },
   components: {
+    securitySchemes: accountSecuritySchemes,
     schemas: {
       ...workspaceSchemas,
       ...analysisSchemas,

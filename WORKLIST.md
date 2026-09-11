@@ -82,6 +82,15 @@ Saving a hypothesis or changing an illustration does not run a model. Vaccine su
 - Start with one complete experiment, then expand from user feedback.
 - Concept artwork is creative visualization, not a predicted human/creature phenotype.
 - AlphaGenome predicts selected molecular effects; a rendered creature is not evidence of what a DNA edit causes.
-- Keep API/data credentials server-side. The public educational release uses unguessable collaboration links for edits to a fixed public sequence; private DNA or paid inference requires account-level ownership and authorization.
+- Keep API/data credentials server-side. The public educational release uses unguessable collaboration links for edits to a fixed public sequence; private analytical records now require native passkey accounts; legacy sessions and workspaces remain public. Paid inference still needs authenticated job ownership and a verified live model connection.
 
 This file records the agreed build scope. Checkboxes track delivered work, not promises.
+
+## Native analytical accounts
+
+- [x] Add real passkey registration/authentication and hashed server sessions, with exact origins and single-use challenges.
+- [x] Give new analyses account ownership; enforce private reads, list, revision-safe update/delete and conflict privacy in shared local/hosted handlers.
+- [x] Preserve legacy public examples as read-only and allow explicit private copies.
+- [x] Add My analyses and account controls; clear private state across logout, tabs, delayed requests and downloads.
+- [x] Verify the account release on the public Workers/D1 runtime and record evidence (`2c9a166`; 143 tests plus real browser account journeys).
+- [ ] Add account-authorized model jobs after checkpoint access and the first verified inference.

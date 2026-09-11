@@ -2,28 +2,46 @@ const string = { type: 'string' };
 const nullableString = { type: ['string', 'null'] };
 const hash = { type: 'string', pattern: '^[a-fA-F0-9]{64}$' };
 const record = { $ref: '#/components/schemas/Analysis' };
-const response = { description: 'Persisted dataset and figure settings.', content: { 'application/json': { schema: { type: 'object', required: ['analysis'], properties: { analysis: record } } } } };
+const response = { description: 'Persisted dataset, figure settings and server-computed access.', content: { 'application/json': { schema: { type: 'object', required: ['analysis', 'access'], properties: { analysis: record, access: { $ref: '#/components/schemas/AnalysisAccess' } } } } } };
+const security = [{ helixSession: [] }];
 const errors = {
   '400': { description: 'Invalid dataset, coordinates, figure settings or JSON.' },
-  '404': { description: 'Analysis does not exist.' },
-  '409': { description: 'Revision conflict. Response includes latest analysis; preserve local edits.' },
+  '401': { description: 'A valid Helix account session is required.' },
+  '403': { description: 'Origin rejected or legacy public record is read-only.' },
+  '404': { description: 'Analysis unavailable. Private records owned by another account return the same response.' },
+  '409': { description: 'Revision conflict. Owner receives latest analysis and access; preserve local edits.' },
   '413': { description: 'Request exceeds 2 MiB.' },
   '429': { description: 'Request budget exceeded; retry later.' },
 };
 const body = (name: string) => ({ required: true, content: { 'application/json': { schema: { $ref: `#/components/schemas/${name}` } } } });
 
 export const analysisPaths = {
-  '/api/analyses': { post: { operationId: 'createAnalysis', summary: 'Save scores, genomic tracks, splice junctions or experimental measurements with a figure recipe',
-    description: 'Stores supplied numerical results without running inference. Anyone with the returned link can view and edit it. Do not upload private genomic data.',
-    requestBody: body('AnalysisInput'), responses: { '201': response, ...errors } } },
+  '/api/analyses': {
+    get: { operationId: 'listAnalyses', summary: 'List your private saved analyses', security,
+      parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } },
+        { name: 'cursor', in: 'query', schema: { type: 'string', maxLength: 512 } }],
+      responses: { '200': { description: 'Bounded summaries belonging to the account. nextCursor is null at the end.', content: { 'application/json': { schema: { type: 'object', properties: {
+        analyses: { type: 'array', items: { $ref: '#/components/schemas/AnalysisSummary' } }, nextCursor: { type: ['string', 'null'] },
+      } } } } }, ...errors } },
+    post: { operationId: 'createAnalysis', summary: 'Save supplied numerical results and a figure recipe privately', security,
+      description: 'Requires a passkey account session and exact same-origin Origin header. The server sets ownership; the URL grants no access to other accounts. No inference is run.',
+      requestBody: body('AnalysisInput'), responses: { '201': response, ...errors } } },
   '/api/analyses/{id}': {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-    get: { operationId: 'getAnalysis', summary: 'Read a saved analysis', responses: { '200': response, ...errors } },
-    patch: { operationId: 'updateAnalysis', summary: 'Save a complete replacement at the expected revision',
+    get: { operationId: 'getAnalysis', summary: 'Read your saved analysis or a read-only legacy public example', security: [{ helixSession: [] }, {}], responses: { '200': response, ...errors } },
+    patch: { operationId: 'updateAnalysis', summary: 'Save a complete replacement of your analysis at the expected revision', security,
       requestBody: body('AnalysisPatch'), responses: { '200': response, ...errors } },
+    delete: { operationId: 'deleteAnalysis', summary: 'Delete your analysis at the expected revision', security,
+      requestBody: body('AnalysisDelete'), responses: { '204': { description: 'Deleted.' }, ...errors } },
   },
 };
 export const analysisSchemas = {
+  AnalysisAccess: { type: 'object', required: ['mode', 'canWrite'], properties: { mode: { enum: ['owner', 'legacy-public'] }, canWrite: { type: 'boolean' } } },
+  AnalysisSummary: { type: 'object', required: ['id', 'title', 'kind', 'revision', 'updatedAt'], properties: {
+    id: { type: 'string', format: 'uuid' }, title: string, kind: { enum: ['scores', 'tracks', 'measurements', 'junctions'] },
+    revision: { type: 'integer', minimum: 0 }, updatedAt: { type: 'string', format: 'date-time' },
+  } },
+  AnalysisDelete: { type: 'object', additionalProperties: false, required: ['revision'], properties: { revision: { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER } } },
   AnalysisInterval: { type: 'object', additionalProperties: false, required: ['chromosome', 'start', 'end', 'coordinateSystem'],
     description: 'A nonempty interval on a primary human chromosome. End is exclusive.',
     properties: { chromosome: string, start: { type: 'integer', minimum: 0 }, end: { type: 'integer', minimum: 1 }, coordinateSystem: { const: '0-based-half-open' } } },

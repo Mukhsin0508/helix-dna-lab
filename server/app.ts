@@ -13,6 +13,7 @@ import { openApiDocument } from "./openapi.ts";
 import { SessionStore } from "./store.ts";
 import { registerWorkspaceRoutes } from "./workbench.ts";
 import { registerAnalysisRoutes } from "./analyses.ts";
+import { AccountRequestError } from "../shared/auth.server.ts";
 
 const baseSchema = z.enum(["A", "C", "G", "T"]);
 const revisionSchema = z
@@ -95,6 +96,7 @@ export async function createApp(dbPath: string): Promise<FastifyInstance> {
     }
   });
   app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof AccountRequestError) return reply.code(error.statusCode).send({ error: error.code, message: error.message });
     if (error instanceof ZodError) {
       return reply
         .code(400)

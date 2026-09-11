@@ -1,3 +1,4 @@
+import { installPasskey, registerInDialog } from './browser-passkey-helper.mjs';
 import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -6,8 +7,9 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.QA
 await fs.mkdir('qa-analysis',{recursive:true});
 const checks=[]; const errors=[];
 const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});
-const page=await context.newPage(); page.on('pageerror',e=>errors.push(e.message));
-async function saved(){await page.getByRole('button',{name:'Save analysis',exact:true}).click();await page.getByText('Analysis saved',{exact:true}).waitFor();}
+const page=await context.newPage(); await installPasskey(context,page); page.on('pageerror',e=>errors.push(e.message));
+let registered=false;
+async function saved(){await page.getByRole('button',{name:'Save analysis',exact:true}).click();if(!registered){await registerInDialog(page);registered=true;}await page.getByText('Analysis saved privately',{exact:true}).waitFor();}
 async function download(label){const p=page.waitForEvent('download');await page.getByRole('button',{name:'Export',exact:true}).click();await page.getByRole('button',{name:label}).click();const file=await p;return{bytes:await fs.readFile(await file.path()),name:file.suggestedFilename()};}
 try{
  await page.goto(base); await page.getByRole('textbox',{name:'Figure title'}).waitFor();
@@ -30,10 +32,10 @@ try{
  await page.reload(); await page.waitForFunction(()=>document.querySelector('input[aria-label="Figure title"]')?.value==='QA · variant analysis');
  assert.equal(await page.getByRole('combobox',{name:'Gene',exact:true}).inputValue(),'METTL26');
  checks.push('save and reload filtered analysis');
- const fresh=await browser.newContext();const other=await fresh.newPage();await other.goto(`${base}/?analysis=${id}`);await other.waitForFunction(()=>document.querySelector('input[aria-label="Figure title"]')?.value==='QA · variant analysis');await fresh.close();
- checks.push('shared record opens in fresh browser');
+ const fresh=await browser.newContext();const other=await fresh.newPage();await other.goto(`${base}/?analysis=${id}`);await other.getByRole('alert').filter({hasText:'unavailable'}).waitFor();assert.notEqual(await other.getByRole('textbox',{name:'Figure title'}).inputValue(),'QA · variant analysis');await fresh.close();
+ checks.push('private record remains unavailable in an anonymous browser');
  const winner={...stored.analysis.settings,title:'Other window won'};
- const patch=await page.request.patch(`${base}/api/analyses/${id}`,{data:{revision:0,dataset:stored.analysis.dataset,settings:winner}});assert.equal(patch.status(),200);
+ const patch=await page.request.patch(`${base}/api/analyses/${id}`,{headers:{Origin:new URL(base).origin},data:{revision:0,dataset:stored.analysis.dataset,settings:winner}});assert.equal(patch.status(),200);
  await page.getByRole('textbox',{name:'Figure title'}).fill('Preserved local draft');await page.getByRole('button',{name:'Save analysis',exact:true}).click();
  await page.getByRole('button',{name:'Save a copy',exact:true}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Figure title'}).inputValue(),'Preserved local draft');
  await page.getByRole('button',{name:'Save a copy',exact:true}).click();await page.getByText('Saved as a new analysis',{exact:true}).waitFor();

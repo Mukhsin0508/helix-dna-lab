@@ -5,18 +5,12 @@ import { WORKSPACE_BODY_LIMIT } from '../shared/workbench'
 import { handleWorkspaceRequest } from './workbench.server'
 import { ANALYSIS_BODY_LIMIT } from '../shared/analysis-record'
 import { handleAnalysisRequest } from './analyses.server'
+import { createAccountService, AccountRequestError } from '../shared/auth.server'
+import type { AuthDatabase, AuthStatement } from '../shared/auth-database'
 
 /** Only the D1 operations used by this API; tests provide real SQLite statements. */
-export interface LabStatement {
-  bind(...values: (string | number)[]): LabStatement
-  first<T>(): Promise<T | null>
-  run(): Promise<{ meta: { changes: number } }>
-  all(): Promise<unknown>
-}
-
-export interface LabDatabase {
-  prepare(query: string): LabStatement
-}
+export type LabStatement = AuthStatement
+export type LabDatabase = AuthDatabase
 
 const uuid = z.string().uuid()
 const revision = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -127,6 +121,7 @@ async function conflict(db: LabDatabase, id: string): Promise<Response> {
 
 /** Creates a request handler bound to persistent storage, without loading platform bindings. */
 export function createLabHandler(db: LabDatabase | undefined): (request: Request) => Promise<Response> {
+  const accounts = db ? createAccountService(db, { origins: ['https://helix-dna-lab.higgsfield.app'] }) : undefined
   return async (request: Request): Promise<Response> => {
     try {
       const url = new URL(request.url)
@@ -142,16 +137,24 @@ export function createLabHandler(db: LabDatabase | undefined): (request: Request
         const { openApiDocument } = await import('../lab/openapi')
         return json({ ...openApiDocument, servers: [{ url: 'https://helix-dna-lab.higgsfield.app' }] })
       }
-      if (!['GET', 'POST', 'PATCH'].includes(method)) {
-        return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405, { Allow: 'GET, POST, PATCH' })
+      if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(method)) {
+        return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405, { Allow: 'GET, POST, PATCH, DELETE' })
       }
+      if (method === 'DELETE' && !pathname.startsWith('/api/analyses/')) return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405, { Allow: 'GET, POST, PATCH' })
       if (method !== 'GET') {
         const origin = request.headers.get('origin')
         if (origin && origin !== url.origin) throw new RequestFailure(403, 'Cross-site changes are not allowed.')
       }
       await budget(db, request)
-      const analysisResponse = await handleAnalysisRequest(db, request, req => body(req, ANALYSIS_BODY_LIMIT))
-      if (analysisResponse) return analysisResponse
+      if (/^\/api\/(account|analyses)(\/|$)/.test(pathname)) {
+        const authHeaders = new Headers(request.headers)
+        authHeaders.set('x-helix-client-address', request.headers.get('cf-connecting-ip') ?? 'unknown')
+        const authRequest = new Request(request, { headers: authHeaders })
+        const accountResponse = await accounts!.handle(authRequest, req => body(req, 64 * 1024))
+        if (accountResponse) return accountResponse
+        const analysisResponse = await handleAnalysisRequest(db, authRequest, req => body(req, ANALYSIS_BODY_LIMIT), accounts!)
+        if (analysisResponse) return analysisResponse
+      }
       const workspaceResponse = await handleWorkspaceRequest(db, request, req => body(req, method === 'PATCH' ? WORKSPACE_BODY_LIMIT : BODY_LIMIT))
       if (workspaceResponse) return workspaceResponse
       if (pathname === '/api/sessions' && method === 'POST') {
@@ -224,6 +227,7 @@ export function createLabHandler(db: LabDatabase | undefined): (request: Request
       }
       return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405)
     } catch (error) {
+      if (error instanceof AccountRequestError) return json({ error: error.code, message: error.message }, error.statusCode)
       if (error instanceof z.ZodError) return json({ error: 'validation_error', message: 'The request contains invalid fields.' }, 400)
       if (error instanceof RequestFailure) {
         return json({ error: error.code, message: error.message }, error.status, error.status === 429 ? { 'Retry-After': '60' } : {})
