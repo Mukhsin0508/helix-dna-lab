@@ -11,6 +11,7 @@
     "test:browser": "node tests/browser-analyses.mjs",
     "test:junction-browser": "node tests/browser-junctions.mjs",
     "import:gpu-result": "tsx inference/import-service-result.ts",
+    "test:integrations": "node tests/browser-integration-tokens.mjs",
     "test:accounts": "node tests/browser-accounts.mjs && node tests/browser-account-ui.mjs"
   },
   "dependencies": {

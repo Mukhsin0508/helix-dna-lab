@@ -25,7 +25,7 @@ The owner selected a researcher-focused analytical workspace using AlphaGenome A
 - [x] Add typed experimental-measurement JSON imports and a source-backed DNM1 Table S4 plot, preserving printed values and missing uncertainty.
 - [ ] Add prediction-versus-measurement analysis once matching predictions, endpoints and assay contexts are available.
 - [ ] Validate utility with a research workflow and held-out measurements.
-- [ ] Add account ownership before accepting private genomic results or paid model execution.
+- [x] Add account ownership before accepting private genomic results or paid model execution.
 - [ ] Expose the analytical tools through AllMCP to ChatGPT and Claude.
 
 ## Historical direction: outcome and evidence workspace
@@ -94,3 +94,12 @@ This file records the agreed build scope. Checkboxes track delivered work, not p
 - [x] Add My analyses and account controls; clear private state across logout, tabs, delayed requests and downloads.
 - [x] Verify the account release on the public Workers/D1 runtime and record evidence (`2c9a166`; 143 tests plus real browser account journeys).
 - [ ] Add account-authorized model jobs after checkpoint access and the first verified inference.
+
+## Assistant integration
+
+- [x] Add scoped, expiring and revocable account access tokens for the analytical API; keep passkey and token management cookie-only.
+- [x] Implement the native AllMCP Helix provider in an isolated worktree: identity, list, read, create, revision-safe update and full recipe export.
+- [x] Deploy token support and verify the provider against real public Helix requests, including private create/update, stale revision conflict and exact recipe export.
+- [x] Reopen the provider-created analysis in the signed-in browser and verify the same saved title and 12 source measurements; delete the disposable analysis and revoke its token after QA.
+- [ ] Deploy the provider to AllMCP and connect an authorized user through its browser credential flow.
+- [ ] Verify the same analysis from ChatGPT or Claude and the website.

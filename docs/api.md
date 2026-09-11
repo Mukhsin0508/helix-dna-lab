@@ -1,18 +1,25 @@
 # Analytical API
 
-The current figure workspace uses these endpoints. Older session endpoints below remain for compatibility.
+The current workspace uses account-private numerical analyses. The full typed contract is served at `/api/openapi.json`.
 
 | Method | Path | Result |
 |---|---|---|
-| POST | `/api/analyses` | Saves `{dataset, settings}`; returns `{analysis}` with UUID and revision 0. |
-| GET | `/api/analyses/:id` | Returns complete dataset, provenance, figure recipe and revision. |
-| PATCH | `/api/analyses/:id` | Accepts `{revision, dataset, settings}`. Atomic revision conflict returns 409 and the latest analysis. |
+| GET | `/api/analyses` | Your saved summaries and a pagination cursor. |
+| POST | `/api/analyses` | Saves `{dataset, settings}`; returns `{analysis, access}` with UUID and revision 0. |
+| GET | `/api/analyses/:id` | Complete dataset, provenance, figure recipe, revision and access. |
+| PATCH | `/api/analyses/:id` | Accepts `{revision, dataset, settings}`. A conflict returns 409 and the latest owner-visible record. |
+| DELETE | `/api/analyses/:id` | Accepts `{revision}` and deletes your matching record; returns 204. |
 
-The `scores` dataset accepts the documented normalized AlphaGenome columns in `shared/analysis.ts`; `tracks` accepts chromosome, zero-based position, reference/alternate numeric signals and track name. A dataset requires an explicit assembly and source metadata. Maximum 5000 rows, 2 MiB. The API stores supplied values without inference. It does not fetch source URLs or validate reference alleles.
+Use a verified passkey cookie session in the browser or an expiring access token in `Authorization: Bearer …` for integrations. Cookie mutations require the exact website Origin. Tokens require `analyses:read` for reads and `analyses:write` for create/update/delete. An invalid bearer is rejected even if a valid browser cookie is also supplied. Account and token management remain browser-session-only.
 
-Analysis links grant view/edit access to anyone holding the URL. Use public or non-sensitive results. Local CSV/JSON drafts are not uploaded until Save or Share. Do not put service keys in these requests. The public OpenAPI contract includes all dataset and figure schemas.
+New analyses belong to their authenticated account. The URL does not grant private access. Historical unowned analyses are public and read-only; save a private copy to edit them. CSV/JSON drafts remain in memory until saved; local image/recipe exports do not upload a draft.
+
+Supported datasets: `scores`, paired `tracks`, `junctions`, and experimental `measurements`. Preserve exact values, nulls, coordinates and source metadata. Maximum 5,000 rows and 2 MiB per analysis request. The API validates and stores supplied values; it does not run inference, retrieve source URLs or independently authenticate imported provenance. See [assistant integration](assistant-integration.md) for token management and AllMCP.
 
 ## Historical APIs
+
+These retained educational endpoints are separate from the account-private analytical product. They still use public collaboration semantics and must not hold private research data.
+
 
 # DNA Lab API
 

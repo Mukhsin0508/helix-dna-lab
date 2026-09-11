@@ -3,11 +3,11 @@ const nullableString = { type: ['string', 'null'] };
 const hash = { type: 'string', pattern: '^[a-fA-F0-9]{64}$' };
 const record = { $ref: '#/components/schemas/Analysis' };
 const response = { description: 'Persisted dataset, figure settings and server-computed access.', content: { 'application/json': { schema: { type: 'object', required: ['analysis', 'access'], properties: { analysis: record, access: { $ref: '#/components/schemas/AnalysisAccess' } } } } } };
-const security = [{ helixSession: [] }];
+const security = [{ helixSession: [] }, { helixAccessToken: [] }];
 const errors = {
   '400': { description: 'Invalid dataset, coordinates, figure settings or JSON.' },
-  '401': { description: 'A valid Helix account session is required.' },
-  '403': { description: 'Origin rejected or legacy public record is read-only.' },
+  '401': { description: 'A valid Helix account session or scoped access token is required.' },
+  '403': { description: 'Origin rejected, token scope insufficient, or legacy public record is read-only.' },
   '404': { description: 'Analysis unavailable. Private records owned by another account return the same response.' },
   '409': { description: 'Revision conflict. Owner receives latest analysis and access; preserve local edits.' },
   '413': { description: 'Request exceeds 2 MiB.' },
@@ -24,14 +24,14 @@ export const analysisPaths = {
         analyses: { type: 'array', items: { $ref: '#/components/schemas/AnalysisSummary' } }, nextCursor: { type: ['string', 'null'] },
       } } } } }, ...errors } },
     post: { operationId: 'createAnalysis', summary: 'Save supplied numerical results and a figure recipe privately', security,
-      description: 'Requires a passkey account session and exact same-origin Origin header. The server sets ownership; the URL grants no access to other accounts. No inference is run.',
+      description: 'Requires analyses:write token scope, or a passkey account session with the exact same-origin Origin header. The server sets ownership; the URL grants no access to other accounts. No inference is run.',
       requestBody: body('AnalysisInput'), responses: { '201': response, ...errors } } },
   '/api/analyses/{id}': {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-    get: { operationId: 'getAnalysis', summary: 'Read your saved analysis or a read-only legacy public example', security: [{ helixSession: [] }, {}], responses: { '200': response, ...errors } },
-    patch: { operationId: 'updateAnalysis', summary: 'Save a complete replacement of your analysis at the expected revision', security,
+    get: { operationId: 'getAnalysis', summary: 'Read your saved analysis or a read-only legacy public example', security: [...security, {}], responses: { '200': response, ...errors } },
+    patch: { operationId: 'updateAnalysis', summary: 'Save a complete replacement of your analysis at the expected revision', security, description: 'Requires analyses:write token scope, or a passkey session and exact Origin. Send the complete dataset and settings; do not discard other fields when reconciling a conflict.',
       requestBody: body('AnalysisPatch'), responses: { '200': response, ...errors } },
-    delete: { operationId: 'deleteAnalysis', summary: 'Delete your analysis at the expected revision', security,
+    delete: { operationId: 'deleteAnalysis', summary: 'Delete your analysis at the expected revision', security, description: 'Requires analyses:write token scope, or a passkey session and exact Origin.',
       requestBody: body('AnalysisDelete'), responses: { '204': { description: 'Deleted.' }, ...errors } },
   },
 };

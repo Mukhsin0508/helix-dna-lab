@@ -1,3 +1,4 @@
+import { integrationPaths, integrationSecuritySchemes } from "../shared/integration-openapi.ts";
 import { accountPaths, accountSecuritySchemes } from "../shared/account-openapi.ts";
 import { analysisPaths, analysisSchemas } from "../shared/analysis-openapi.ts";
 import { workspacePaths, workspaceSchemas } from "../shared/workbench-openapi.ts";
@@ -54,9 +55,9 @@ export const openApiDocument = {
   openapi: "3.1.0",
   info: {
     title: "Helix Analysis API",
-    version: "1.2.0",
+    version: "1.4.0",
     description:
-      "Analytical workspace for imported and published AlphaGenome results. Save datasets, figure settings and provenance together; updates use optimistic revisions. Analyses accept up to 5000 rows and 2 MiB per request. Collaboration links grant read and edit access; no account-level authentication. Use public or non-sensitive research results. No live model or Atlas request is made. Historical replay/session endpoints remain available.",
+      "Analytical workspace for imported and published AlphaGenome results. Save datasets, figure settings and provenance together; updates use optimistic revisions. Analyses accept up to 5000 rows and 2 MiB per request. New analyses are account-private. Use passkey sessions or scoped access tokens; links alone grant no private access. Legacy unowned analyses are public and read-only. No live model or Atlas request is made. Historical replay/session endpoints remain available.",
   },
   servers: [
     {
@@ -68,6 +69,7 @@ export const openApiDocument = {
     ...workspacePaths,
     ...analysisPaths,
     ...accountPaths,
+    ...integrationPaths,
     "/api/health": {
       get: {
         operationId: "getHealth",
@@ -259,7 +261,7 @@ export const openApiDocument = {
     },
   },
   components: {
-    securitySchemes: accountSecuritySchemes,
+    securitySchemes: { ...accountSecuritySchemes, ...integrationSecuritySchemes },
     schemas: {
       ...workspaceSchemas,
       ...analysisSchemas,

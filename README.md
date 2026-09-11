@@ -69,7 +69,9 @@ Higgsfield-generated imagery is not part of the analytical interface. Earlier il
 
 `POST /api/analyses` stores `{dataset, settings}`. `GET /api/analyses/:id` retrieves it. `PATCH /api/analyses/:id` requires `{revision, dataset, settings}` and returns 409 with the latest record on conflict. Schemas and endpoint documentation are exposed at `/api/openapi.json`.
 
-Imports and drafts stay in the current browser until Save/share is used. Anyone with a saved analysis link can view and edit it. These are capability links, not authenticated accounts: use public or non-sensitive research results. Private genomic datasets need account ownership and access control before upload. Each input is capped at 5000 rows and 2 MiB.
+Imports and drafts stay in the current browser until saved. Sign in with a passkey to save a private analysis; its link requires the owning account. Historical public examples are read-only, with an explicit option to save a private copy. Each input is capped at 5000 rows and 2 MiB.
+
+Scoped, expiring access tokens let an external assistant work with the same private analyses. Read-only is the default; editing requires an explicit grant. The native AllMCP provider is implemented and its registered tools have passed real requests against public Helix, including reopening the same figure in the browser. AllMCP production deployment and a connected ChatGPT/Claude session remain pending. See [assistant integration](docs/assistant-integration.md).
 
 The frontend, local API and hosted adapter share the same dataset and figure schemas. See [hosting](docs/hosting.md) for deployment status and synchronization.
 

@@ -1,12 +1,15 @@
 import { z } from 'zod';
 import type { AuthDatabase } from './auth-database.ts';
 import type { createAccountService } from './auth.server.ts';
+import { AccountRequestError } from './auth.server.ts';
+import type { createIntegrationTokenService } from './integration-tokens.server.ts';
 import {
   analysisCreateSchema, analysisPatchSchema, analysisDeleteSchema, analysisIdSchema, newAnalysis,
   type AnalysisRecord, type AnalysisEnvelope, type AnalysisSummary,
 } from './analysis-record.ts';
 
 type Accounts = Pick<ReturnType<typeof createAccountService>, 'accountForRequest' | 'requireWriteOrigin'>;
+type IntegrationTokens = Pick<ReturnType<typeof createIntegrationTokenService>, 'authorize'>;
 type Stored = { payload: string; owner_id: string | null };
 const initialized = new WeakMap<AuthDatabase, Promise<void>>();
 /** Preserve every old record byte-for-byte. Unowned historical links remain read-only. */
@@ -37,9 +40,9 @@ function json(data: unknown, status = 200): Response {
 }
 const notFound = () => json({ error: 'analysis_not_found', message: 'This analysis is unavailable.' }, 404);
 const signIn = () => json({ error: 'authentication_required', message: 'Sign in to save or manage analyses.' }, 401);
-function envelope(row: Stored): AnalysisEnvelope {
+function envelope(row: Stored, canWrite = true): AnalysisEnvelope {
   return { analysis: JSON.parse(row.payload) as AnalysisRecord,
-    access: { mode: row.owner_id === null ? 'legacy-public' : 'owner', canWrite: row.owner_id !== null } };
+    access: { mode: row.owner_id === null ? 'legacy-public' : 'owner', canWrite: row.owner_id !== null && canWrite } };
 }
 async function load(db: AuthDatabase, id: string, owner: string | null): Promise<Stored | null> {
   return db.prepare('SELECT payload,owner_id FROM lab_analyses WHERE id=? AND (owner_id IS NULL OR owner_id=?)')
@@ -60,6 +63,7 @@ function encodeCursor(row: AnalysisSummary): string {
 /** Identical owner checks and revision semantics for local SQLite and hosted D1. */
 export async function handleAnalysisRequest(
   db: AuthDatabase, request: Request, readBody: (request: Request) => Promise<unknown>, accounts: Accounts,
+  tokens?: IntegrationTokens,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   const isList = url.pathname === '/api/analyses';
@@ -67,10 +71,14 @@ export async function handleAnalysisRequest(
   if (!isList && !match) return undefined;
   const allowed = isList ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'];
   if (!allowed.includes(request.method)) return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405);
-  const account = await accounts.accountForRequest(request);
+  // An explicit machine credential never falls back to an unrelated browser session.
+  const machine = request.headers.has('authorization');
+  if (machine && !tokens) throw new AccountRequestError(401, 'invalid_token', 'Use a valid Helix access token.');
+  const integration = machine ? await tokens!.authorize(request, request.method === 'GET' ? 'analyses:read' : 'analyses:write') : null;
+  const account = integration ? integration.account : await accounts.accountForRequest(request);
   if (request.method !== 'GET') {
     if (!account) return signIn();
-    accounts.requireWriteOrigin(request);
+    if (!machine) accounts.requireWriteOrigin(request);
   }
   if (isList && !account) return signIn();
   await ensureAnalysisTable(db);
@@ -96,7 +104,7 @@ export async function handleAnalysisRequest(
   const id = analysisIdSchema.parse(match![1]);
   const row = await load(db, id, account?.id ?? null);
   if (!row) return notFound();
-  if (request.method === 'GET') return json(envelope(row));
+  if (request.method === 'GET') return json(envelope(row, integration ? integration.scopes.includes('analyses:write') : true));
   if (row.owner_id === null) return json({ error: 'read_only_analysis', message: 'This public example is read-only. Save a private copy to keep changes.' }, 403);
   const previous = envelope(row).analysis;
   if (request.method === 'DELETE') {

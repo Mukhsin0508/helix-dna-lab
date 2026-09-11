@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Fingerprint, KeyRound, Plus, X } from 'lucide-react';
 import type { Account, PasskeySummary } from '../../shared/account';
 import type { AuthState } from '../useAuth';
+import IntegrationTokens from './IntegrationTokens';
 
 export default function AuthDialog({ auth, onClose, onAuthenticated, intent = 'account' }: { auth: AuthState; onClose: () => void; onAuthenticated: (account: Account) => void; intent?: 'account' | 'save' }) {
   const [mode, setMode] = useState<'signin' | 'register'>('signin'), [name, setName] = useState('');
@@ -13,7 +14,7 @@ export default function AuthDialog({ auth, onClose, onAuthenticated, intent = 'a
     const key = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
       if (event.key !== 'Tab') return;
-      const items = [...(container.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href]') || [])].filter(item => item.offsetParent !== null);
+      const items = [...(container.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href]') || [])].filter(item => item.offsetParent !== null);
       if (!items.length) return;
       if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1)?.focus(); }
       if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus(); }
@@ -38,7 +39,7 @@ export default function AuthDialog({ auth, onClose, onAuthenticated, intent = 'a
   return <div className="modal-backdrop" onClick={event => { if (event.target === event.currentTarget) onClose(); }}><div className="modal account-dialog" role="dialog" aria-modal="true" aria-label={title} ref={container}>
     <div className="modal-header"><h2>{title}</h2><button className="icon-button" aria-label="Close account dialog" onClick={onClose}><X size={18}/></button></div>
     <div className="modal-body">
-      {auth.account ? <><div className="account-identity"><Fingerprint size={25}/><div><strong>{auth.account.displayName}</strong><span>Analyses are private to your account.</span></div></div><div className="account-section-heading"><h3>Passkeys</h3><button className="button" data-initial-focus disabled={auth.busy || auth.checking} onClick={() => { void add(); }}><Plus size={14}/>Add passkey</button></div><p className="field-hint">Add another passkey while you can sign in. There is no email recovery.</p>{loadingKeys ? <p role="status">Loading passkeys…</p> : <ul className="passkey-list">{passkeys.map((key, index) => <li key={key.id}><KeyRound size={16}/><div><strong>Passkey {index + 1}</strong><span>{key.deviceType === 'multiDevice' ? 'Multi-device' : 'Single-device'} · {key.backedUp ? 'Backed up' : 'Not backed up'}<br/>Added {new Date(key.createdAt).toLocaleDateString('en-GB')}{key.lastUsedAt ? ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString('en-GB')}` : ''}</span></div></li>)}</ul>}{listError && <div className="import-error" role="alert">{listError}<button className="template-link" onClick={() => { void loadKeys(); }}>Retry</button></div>}</>
+      {auth.account ? <><div className="account-identity"><Fingerprint size={25}/><div><strong>{auth.account.displayName}</strong><span>Analyses are private to your account.</span></div></div><div className="account-section-heading"><h3>Passkeys</h3><button className="button" data-initial-focus disabled={auth.busy || auth.checking} onClick={() => { void add(); }}><Plus size={14}/>Add passkey</button></div><p className="field-hint">Add another passkey while you can sign in. There is no email recovery.</p>{loadingKeys ? <p role="status">Loading passkeys…</p> : <ul className="passkey-list">{passkeys.map((key, index) => <li key={key.id}><KeyRound size={16}/><div><strong>Passkey {index + 1}</strong><span>{key.deviceType === 'multiDevice' ? 'Multi-device' : 'Single-device'} · {key.backedUp ? 'Backed up' : 'Not backed up'}<br/>Added {new Date(key.createdAt).toLocaleDateString('en-GB')}{key.lastUsedAt ? ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString('en-GB')}` : ''}</span></div></li>)}</ul>}{listError && <div className="import-error" role="alert">{listError}<button className="template-link" onClick={() => { void loadKeys(); }}>Retry</button></div>}<IntegrationTokens auth={auth}/></>
       : <form onSubmit={event => { event.preventDefault(); void submit(); }}>
         <div className="account-intro"><Fingerprint size={30}/><p>{intent === 'save' ? 'Sign in to save this analysis privately.' : 'Keep your analyses in your own workspace.'}</p></div>
         <div className="import-types" aria-label="Account action"><button type="button" data-initial-focus className={mode === 'signin' ? 'active' : ''} disabled={auth.busy} onClick={() => { setMode('signin'); auth.clearError(); }}>Sign in</button><button type="button" className={mode === 'register' ? 'active' : ''} disabled={auth.busy} onClick={() => { setMode('register'); auth.clearError(); }}>Create account</button></div>

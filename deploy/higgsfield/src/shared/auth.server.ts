@@ -49,6 +49,7 @@ export interface AccountService {
   handle(request: Request, readBody: (request: Request) => Promise<unknown>): Promise<Response | undefined>;
   accountForRequest(request: Request): Promise<Account | null>;
   requireWriteOrigin(request: Request): void;
+  requireApprovedOrigin(request: Request): string;
 }
 export class AccountRequestError extends Error {
   constructor(readonly statusCode: number, readonly code: string, message: string) { super(message); }
@@ -121,6 +122,7 @@ export function createAccountService(db: AuthDatabase, config: { origins: readon
     const origin = originFor(request);
     if (request.headers.get('origin') !== origin.origin) throw new AccountRequestError(403, 'origin_not_allowed', 'This request must come from the same lab website.');
   }
+  function requireApprovedOrigin(request: Request): string { return originFor(request).origin; }
   async function accountForRequest(request: Request): Promise<Account | null> {
     const origin = originFor(request);
     const secret = cookieToken(request, SESSION_COOKIE);
@@ -137,7 +139,18 @@ export function createAccountService(db: AuthDatabase, config: { origins: readon
     return result;
   }
   async function body(request: Request, readBody: (request: Request) => Promise<unknown>): Promise<unknown> {
-    const data = await readBody(request);
+    let data: unknown;
+    try { data = await readBody(request); }
+    catch (error) {
+      if (error instanceof AccountRequestError) throw error;
+      const failure = error as { status?: unknown; statusCode?: unknown } | null;
+      const status = failure?.statusCode ?? failure?.status;
+      // Hosting and Node body readers use different error classes. Retain client status without echoing body details.
+      if (error instanceof SyntaxError || status === 400) throw new AccountRequestError(400, 'invalid_request', 'Use a valid JSON account request.');
+      if (status === 413) throw new AccountRequestError(413, 'body_too_large', 'The account request is too large.');
+      if (status === 415) throw new AccountRequestError(415, 'invalid_content_type', 'Use JSON for account requests.');
+      throw error;
+    }
     if (new TextEncoder().encode(JSON.stringify(data) ?? '').byteLength > AUTH_BODY_LIMIT) throw new AccountRequestError(413, 'body_too_large', 'The passkey request is too large.');
     return data;
   }
@@ -314,5 +327,5 @@ export function createAccountService(db: AuthDatabase, config: { origins: readon
       return json({ error: 'account_unavailable', message: 'The account service could not complete this request.' }, 500, cookies);
     }
   }
-  return { handle, accountForRequest, requireWriteOrigin };
+  return { handle, accountForRequest, requireWriteOrigin, requireApprovedOrigin };
 }

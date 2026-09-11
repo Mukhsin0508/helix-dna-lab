@@ -6,6 +6,7 @@ import { handleWorkspaceRequest } from './workbench.server'
 import { ANALYSIS_BODY_LIMIT } from '../shared/analysis-record'
 import { handleAnalysisRequest } from './analyses.server'
 import { createAccountService, AccountRequestError } from '../shared/auth.server'
+import { createIntegrationTokenService } from '../shared/integration-tokens.server'
 import type { AuthDatabase, AuthStatement } from '../shared/auth-database'
 
 /** Only the D1 operations used by this API; tests provide real SQLite statements. */
@@ -122,6 +123,7 @@ async function conflict(db: LabDatabase, id: string): Promise<Response> {
 /** Creates a request handler bound to persistent storage, without loading platform bindings. */
 export function createLabHandler(db: LabDatabase | undefined): (request: Request) => Promise<Response> {
   const accounts = db ? createAccountService(db, { origins: ['https://helix-dna-lab.higgsfield.app'] }) : undefined
+  const tokens = db && accounts ? createIntegrationTokenService(db, accounts) : undefined
   return async (request: Request): Promise<Response> => {
     try {
       const url = new URL(request.url)
@@ -140,19 +142,21 @@ export function createLabHandler(db: LabDatabase | undefined): (request: Request
       if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(method)) {
         return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405, { Allow: 'GET, POST, PATCH, DELETE' })
       }
-      if (method === 'DELETE' && !pathname.startsWith('/api/analyses/')) return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405, { Allow: 'GET, POST, PATCH' })
+      if (method === 'DELETE' && !pathname.startsWith('/api/analyses/') && !/^\/api\/account\/tokens\/[^/]+$/.test(pathname)) return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405, { Allow: 'GET, POST, PATCH' })
       if (method !== 'GET') {
         const origin = request.headers.get('origin')
         if (origin && origin !== url.origin) throw new RequestFailure(403, 'Cross-site changes are not allowed.')
       }
       await budget(db, request)
-      if (/^\/api\/(account|analyses)(\/|$)/.test(pathname)) {
+      if (/^\/api\/(account|analyses|integrations)(\/|$)/.test(pathname)) {
         const authHeaders = new Headers(request.headers)
         authHeaders.set('x-helix-client-address', request.headers.get('cf-connecting-ip') ?? 'unknown')
         const authRequest = new Request(request, { headers: authHeaders })
+        const tokenResponse = await tokens!.handle(authRequest, req => body(req, 16 * 1024))
+        if (tokenResponse) return tokenResponse
         const accountResponse = await accounts!.handle(authRequest, req => body(req, 64 * 1024))
         if (accountResponse) return accountResponse
-        const analysisResponse = await handleAnalysisRequest(db, authRequest, req => body(req, ANALYSIS_BODY_LIMIT), accounts!)
+        const analysisResponse = await handleAnalysisRequest(db, authRequest, req => body(req, ANALYSIS_BODY_LIMIT), accounts!, tokens!)
         if (analysisResponse) return analysisResponse
       }
       const workspaceResponse = await handleWorkspaceRequest(db, request, req => body(req, method === 'PATCH' ? WORKSPACE_BODY_LIMIT : BODY_LIMIT))

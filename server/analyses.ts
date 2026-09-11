@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { ANALYSIS_BODY_LIMIT } from '../shared/analysis-record.ts';
 import { handleAnalysisRequest } from '../shared/analyses.server.ts';
 import { createAccountService } from '../shared/auth.server.ts';
+import { createIntegrationTokenService } from '../shared/integration-tokens.server.ts';
 import { createAuthDatabase } from './auth-database.ts';
 
 const LOCAL_ORIGINS = ['http://localhost:4191', 'http://127.0.0.1:4191', 'http://localhost:4190', 'http://127.0.0.1:4190'];
@@ -25,16 +26,19 @@ async function send(reply: FastifyReply, response: Response): Promise<FastifyRep
 export function registerAnalysisRoutes(app: FastifyInstance, path: string): void {
   const db = createAuthDatabase(path);
   const accounts = createAccountService(db, { origins: LOCAL_ORIGINS });
+  const tokens = createIntegrationTokenService(db, accounts);
   app.addHook('onClose', async () => { db.close(); });
-  for (const url of ['/api/account', '/api/account/*']) {
-    app.route({ method: ['GET', 'POST'], url, bodyLimit: 64 * 1024, handler: async (request, reply) => {
-      const response = await accounts.handle(webRequest(request), async () => request.body ?? {});
+  for (const url of ['/api/account', '/api/account/*', '/api/integrations/identity']) {
+    app.route({ method: ['GET', 'POST', 'DELETE'], url, bodyLimit: 64 * 1024, handler: async (request, reply) => {
+      const converted = webRequest(request);
+      const response = await tokens.handle(converted, async () => request.body ?? {})
+        ?? await accounts.handle(converted, async () => request.body ?? {});
       return send(reply, response ?? Response.json({ error: 'not_found', message: 'Account endpoint not found.' }, { status: 404 }));
     } });
   }
   for (const url of ['/api/analyses', '/api/analyses/:id']) {
     app.route({ method: ['GET', 'POST', 'PATCH', 'DELETE'], url, bodyLimit: ANALYSIS_BODY_LIMIT, handler: async (request, reply) => {
-      const response = await handleAnalysisRequest(db, webRequest(request), async () => request.body, accounts);
+      const response = await handleAnalysisRequest(db, webRequest(request), async () => request.body, accounts, tokens);
       return send(reply, response ?? Response.json({ error: 'not_found' }, { status: 404 }));
     } });
   }
