@@ -16,7 +16,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: 'og:title', content: meta.og_title },
       { property: 'og:description', content: meta.og_description },
       { property: 'og:type', content: 'website' },
-      { property: 'og:image', content: 'https://helix-dna-lab.higgsfield.app' + meta.og_image_url },
+      { property: 'og:image', content: 'https://genetic-engineering-lab.higgsfield.app' + meta.og_image_url },
       { name: 'twitter:card', content: 'summary_large_image' },
     ],
     links: [{ rel: 'stylesheet', href: appCss }, { rel: 'icon', href: meta.favicon_url }],

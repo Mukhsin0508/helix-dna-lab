@@ -2,7 +2,7 @@
 
 An analytical workspace for researchers comparing genetic variant results. Import source data, select an assay and scoring method, inspect reference and alternate signals, and export reproducible figures with their inputs. No signup: edits save in this browser. React, TypeScript and SVG in the browser; Fastify/SQLite locally and TanStack Start/D1 when hosted.
 
-[Public site](https://helix-dna-lab.higgsfield.app/) · [Research and data sources](docs/ANALYTICAL_LAB.md) · [Browser assistant workflow](docs/browser-assistant-workflow.md) · [Worklist](WORKLIST.md)
+[Public site](https://genetic-engineering-lab.higgsfield.app/) · [Research and data sources](docs/ANALYTICAL_LAB.md) · [Browser assistant workflow](docs/browser-assistant-workflow.md) · [Hosted API setup](docs/hosted-api-setup.md) · [Worklist](WORKLIST.md)
 
 ## Run locally
 
@@ -81,6 +81,6 @@ The frontend, local API and hosted adapter share the same dataset and figure sch
 
 ## Still to build
 
-Live Atlas lookup and AlphaGenome inference are not connected. The official static AVI archive returned HTTP 500 during verification; no requested DNM1 score was retrieved. Rich Atlas API access and self-hosted predictions require authorized access. No clinical efficacy, disease-risk or whole-organism phenotype probabilities are calculated.
+The hosted AlphaGenome RNA-seq path is implemented using the official client through a CPU proxy to Google's service. The owner's `ALPHAGENOME_API_KEY` is still missing, and no actual authenticated inference has been verified; follow [hosted API setup](docs/hosted-api-setup.md). Live Atlas lookup is not connected. The official static AVI archive returned HTTP 500 during earlier verification; no requested DNM1 score was retrieved. Rich Atlas API access and self-hosted predictions require authorized access. No clinical efficacy, disease-risk or whole-organism phenotype probabilities are calculated.
 
-Next stages are actual model/Atlas jobs and evaluation against compatible experimental measurements. No separate in-app chat or AllMCP connection is required. The broad DNA Engineering Lab goal is ongoing; this release provides its numerical analysis and figure-generation core.
+Next stages are verifying an authenticated hosted result, connecting any further Atlas/model outputs, and evaluation against compatible experimental measurements. No separate in-app chat or AllMCP connection is required. The broad DNA Engineering Lab goal is ongoing; this release provides its numerical analysis and figure-generation core.

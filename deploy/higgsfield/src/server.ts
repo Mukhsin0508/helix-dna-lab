@@ -1,3 +1,5 @@
+import { handlePredictionRequest, type PredictionBindings } from './shared/predictions.server';
+export { AppContainer } from './lib/hosted-container.server';
 import { applySecurityHeaders } from "./lib/security-headers.server";
 import "./lib/error-capture";
 
@@ -41,6 +43,8 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const prediction = await handlePredictionRequest(request, env as PredictionBindings);
+      if (prediction) return applySecurityHeaders(prediction);
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return applySecurityHeaders(await normalizeCatastrophicSsrResponse(response));

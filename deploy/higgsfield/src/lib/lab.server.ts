@@ -122,7 +122,7 @@ async function conflict(db: LabDatabase, id: string): Promise<Response> {
 
 /** Creates a request handler bound to persistent storage, without loading platform bindings. */
 export function createLabHandler(db: LabDatabase | undefined): (request: Request) => Promise<Response> {
-  const accounts = db ? createAccountService(db, { origins: ['https://helix-dna-lab.higgsfield.app'] }) : undefined
+  const accounts = db ? createAccountService(db, { origins: ['https://genetic-engineering-lab.higgsfield.app'] }) : undefined
   const tokens = db && accounts ? createIntegrationTokenService(db, accounts) : undefined
   return async (request: Request): Promise<Response> => {
     try {
@@ -137,7 +137,7 @@ export function createLabHandler(db: LabDatabase | undefined): (request: Request
       if (method === 'GET' && pathname === '/api/experiments') return json(EXPERIMENTS)
       if (method === 'GET' && pathname === '/api/openapi.json') {
         const { openApiDocument } = await import('../lab/openapi')
-        return json({ ...openApiDocument, servers: [{ url: 'https://helix-dna-lab.higgsfield.app' }] })
+        return json({ ...openApiDocument, servers: [{ url: 'https://genetic-engineering-lab.higgsfield.app' }] })
       }
       if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(method)) {
         return json({ error: 'method_not_allowed', message: 'Method not allowed.' }, 405, { Allow: 'GET, POST, PATCH, DELETE' })

@@ -74,7 +74,7 @@ try {
   assert.deepEqual(recipe.dataset.interval, dataset.interval);
   assert.deepEqual(recipe.dataset.trackMetadata, dataset.trackMetadata);
   assert.deepEqual(recipe.dataset.provenance, dataset.provenance);
-  assert.equal(recipe.methods.inferencePerformed, false);
+  assert.equal(recipe.methods.inferencePerformedDuringExport, false);
   checks.push('SVG/PNG, exact CSV values and complete JSON recipe export');
   await page.locator('[data-chart="table"]').click();
   assert.equal(await page.locator('.chart-table tbody tr').count(), 3);

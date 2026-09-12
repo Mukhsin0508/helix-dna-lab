@@ -48,7 +48,7 @@ try {
   assert.equal(png.readUInt32BE(0), 0x89504e47); assert.match(csv.toString(), /chr9:128226027:G>A/); assert.match(csv.toString(), /0\.94/); assert.doesNotMatch(csv.toString(), /chr9:128225994:G>A/);
   const recipe = JSON.parse(json.toString()); assert.equal(recipe.dataset.rows.length, 12);
   assert.equal(recipe.dataset.rows.find(row => row.variant === 'chr9:128226027:G>A').value, 0.94);
-  assert.equal(recipe.settings.variant, 'chr9:128226027:G>A'); assert.equal(recipe.methods.inferencePerformed, false);
+  assert.equal(recipe.settings.variant, 'chr9:128226027:G>A'); assert.equal(recipe.methods.inferencePerformedDuringExport, false);
   await Promise.all([fs.writeFile(`${output}/figure.svg`, svg), fs.writeFile(`${output}/figure.png`, png), fs.writeFile(`${output}/selected.csv`, csv), fs.writeFile(`${output}/analysis.json`, json)]);
   checks.push('Actual SVG/PNG/CSV/JSON downloads retain exact data, selection and source');
   await page.getByRole('button', { name: 'Published T-cell scores', exact: true }).click();

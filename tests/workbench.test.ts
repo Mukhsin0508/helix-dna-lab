@@ -12,7 +12,7 @@ import { workspaceToJSON, type Candidate, type Workspace, type WorkspaceEnvelope
 const cloudPath = new URL("../deploy/higgsfield/src/lib/lab.server.ts", import.meta.url).href;
 const { createLabHandler }: { createLabHandler(db: SqliteD1): (request: Request) => Promise<Response> } = await import(cloudPath);
 const migration = readFileSync(new URL("../deploy/higgsfield/migrations/0002_helix.sql", import.meta.url), "utf8");
-const origin = "https://helix-dna-lab.higgsfield.app";
+const origin = "https://genetic-engineering-lab.higgsfield.app";
 
 class SqliteD1 {
   readonly sqlite: DatabaseSync;

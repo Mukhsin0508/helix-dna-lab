@@ -1,6 +1,6 @@
 # Use Helix through the browser
 
-Open [Helix](https://helix-dna-lab.higgsfield.app/) and start working. There is no signup, integration key or AllMCP requirement. An assistant needs interactive browser controls and download access in its chosen client; web search alone cannot operate the lab.
+Open [Helix](https://genetic-engineering-lab.higgsfield.app/) and start working. There is no signup, integration key or AllMCP requirement. An assistant needs interactive browser controls and download access in its chosen client; web search alone cannot operate the lab.
 
 1. Choose **DNM1 measurements** in the left controls. On mobile, use **Open figure controls** first.
 2. Set **Maximum rows** to 12 and open **Data**. The table contains the 12 selected variants from the published Table S4. **Source** opens their assay, aggregation and provenance.

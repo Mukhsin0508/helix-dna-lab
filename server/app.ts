@@ -1,3 +1,4 @@
+import { handlePredictionRequest } from '../shared/predictions.server.ts';
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
@@ -155,6 +156,14 @@ export async function createApp(dbPath: string): Promise<FastifyInstance> {
   }));
   app.get("/api/experiments", async () => EXPERIMENTS);
   app.get("/api/openapi.json", async () => openApiDocument);
+
+  app.route({ method: ['GET', 'POST'], url: '/api/predictions*', handler: async (request, reply) => {
+    const input = new Request(`http://127.0.0.1:4191${request.url}`, { method: request.method, headers: Object.fromEntries(Object.entries(request.headers).filter((entry): entry is [string, string] => typeof entry[1] === 'string')), ...(request.method === 'POST' ? { body: JSON.stringify(request.body) } : {}) });
+    const result = await handlePredictionRequest(input, {});
+    if (!result) return reply.code(404).send();
+    reply.code(result.status); result.headers.forEach((value, name) => reply.header(name, value));
+    return reply.send(await result.text());
+  } });
 
   registerWorkspaceRoutes(app, dbPath);
   registerAnalysisRoutes(app, dbPath);

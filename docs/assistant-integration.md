@@ -1,6 +1,6 @@
 # Use an assistant in Helix
 
-The primary workflow is an assistant operating the [Helix website](https://helix-dna-lab.higgsfield.app/) through browser controls: open an example, inspect values and source methods, adjust the figure and export it. No AllMCP connection or integration token is required for this route. The complete browser workflow now works without signup: local drafts, source inspection, chart iteration and portable exports.
+The primary workflow is an assistant operating the [Genetic Engineering Lab website](https://genetic-engineering-lab.higgsfield.app/) through browser controls: open an example, inspect values and source methods, adjust the figure and export it. No AllMCP connection or integration token is required for this route. The complete browser workflow now works without signup: local drafts, source inspection, chart iteration and portable exports.
 
 Follow the [browser-assisted workflow](browser-assistant-workflow.md). The assistant needs interactive browser tools in the chosen client/session. OpenAI documents page interaction and form entry through [cloud browser in ChatGPT Work](https://help.openai.com/en/articles/20001280-using-cloud-browser-in-chatgpt); availability and website support vary. This does not establish Helix compatibility in every client. The automated browser journey is verified in the release notes; this does not establish compatibility with every assistant client.
 
@@ -12,7 +12,7 @@ This section records retained backend capabilities. Account creation and token-m
 
 ## API connection available to a backend client
 
-Use the fixed base URL `https://helix-dna-lab.higgsfield.app`. Send the token only in the `Authorization: Bearer …` header. Browser cookies are not needed for integration requests. The token works only on the website that issued it. If a client supplies an `Origin` header, it must match that website exactly.
+Use the current base URL `https://genetic-engineering-lab.higgsfield.app`. Send the token only in the `Authorization: Bearer …` header. Browser cookies are not needed for integration requests. The token works only on the origin that issued it; a token from the former hostname is not automatically valid after the rename. If a client supplies an `Origin` header, it must match the issuing website exactly.
 
 | Request | Access | Result |
 | --- | --- | --- |
@@ -25,11 +25,11 @@ Use the fixed base URL `https://helix-dna-lab.higgsfield.app`. Send the token on
 
 Read tokens grant `analyses:read`; edit tokens grant both `analyses:read` and `analyses:write`. They cannot manage passkeys or other tokens. A supplied invalid bearer never falls back to an accompanying browser cookie. Private records belonging to another account return 404; read-only credentials cannot write. Historical public examples remain read-only.
 
-See the [live OpenAPI contract](https://helix-dna-lab.higgsfield.app/api/openapi.json) and [analytical API guide](api.md) for fields and error responses. A 409 response means the revision changed: retrieve the latest record and reconcile or save a copy instead of overwriting it.
+See the [live OpenAPI contract](https://genetic-engineering-lab.higgsfield.app/api/openapi.json) and [analytical API guide](api.md) for fields and error responses. A 409 response means the revision changed: retrieve the latest record and reconcile or save a copy instead of overwriting it.
 
 ## Optional existing AllMCP provider
 
-The **Helix** provider is available in production AllMCP:
+The **Helix** provider was released in production AllMCP against the former hostname. Its connection to the renamed website has not been verified; the release steps below are retained for reference and are not required to use the browser workspace:
 
 1. Request `connect_provider(provider_key='helix')` through AllMCP and open its returned browser link.
 2. Paste the token into **Helix personal access token** on the connection page. The internal credential field is `api_key`.
@@ -45,4 +45,4 @@ If choosing this optional route later, first verify a read: “List my saved Hel
 
 The API supports molecular scores, paired genomic tracks, splice junctions and experimental measurements. It validates up to 5,000 rows and 2 MiB per analysis request. Save exact supplied values, coordinates, nulls, assay/scorer metadata and provenance alongside the figure settings. A chart change should preserve the original dataset. JSON retains the full analysis recipe; CSV is a data export and is not a replacement for its metadata. Keep any checksummed raw-result sidecar separately.
 
-Imported provenance remains source-reported. The API does not fetch source URLs, run AlphaGenome, retrieve live Atlas results, or calculate clinical success rates. The integration provides access to saved analyses; a token does not connect or authorize GPU inference. Private analysis links still require the owning account.
+Imported provenance remains source-reported. The analytical API and optional provider manage saved analyses; they do not fetch source URLs, execute AlphaGenome, retrieve live Atlas results or calculate clinical success rates. A separate hosted prediction path requires the owner's AlphaGenome-issued secret; see [hosted API setup](hosted-api-setup.md). That key is missing and no authenticated prediction is verified yet. An analytical access token does not authorize this service. Private analysis links still require the owning account.

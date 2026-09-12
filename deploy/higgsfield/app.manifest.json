@@ -1,1 +1,11 @@
-{"db":true,"r2":false,"kv":false,"durableObject":null}
+{
+  "db": true,
+  "r2": false,
+  "kv": false,
+  "durableObject": null,
+  "container": {
+    "instanceType": "standard-2",
+    "port": 8080,
+    "sleepAfter": "5m"
+  }
+}

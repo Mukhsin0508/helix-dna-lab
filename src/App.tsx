@@ -8,6 +8,7 @@ import AnalysisFigure from './components/AnalysisFigure';
 import JunctionTable from './components/JunctionTable';
 import { junctionGroups, selectedJunctionRows } from './junctionUtils';
 import { useAnalysis } from './useAnalysis';
+import PredictionPanel from './components/PredictionPanel';
 
 type ImportKind = 'json' | 'scores' | 'tracks';
 const CHARTS = [{ id: 'bars', label: 'Score plot', icon: ChartNoAxesColumnIncreasing }, { id: 'heatmap', label: 'Matrix', icon: Grid2X2 }, { id: 'tracks', label: 'Tracks', icon: ChartNoAxesCombined }, { id: 'junctions', label: 'Junctions', icon: GitBranch }, { id: 'table', label: 'Data', icon: Table2 }] as const;
@@ -101,6 +102,7 @@ export default function App() {
   const lab = useAnalysis();
   const workspaceReady = lab.ready && !lab.busy;
   const { dataset, settings, setSettings } = lab;
+  const [predictionOpen, setPredictionOpen] = useState(false);
   const [importKind, setImportKind] = useState<ImportKind | null>(null), [evidence, setEvidence] = useState(false), [controls, setControls] = useState(false), [exportOpen, setExportOpen] = useState(false), [message, setMessage] = useState(''), [selected, setSelected] = useState<ScoreRow | null>(null);
   const svg = useRef<SVGSVGElement>(null), exportContainer = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
@@ -141,7 +143,7 @@ export default function App() {
     try {
       if (kind === 'json') {
         const input = analysisCreateSchema.parse({ dataset, settings });
-        downloadFile(JSON.stringify({ format: 'helix-analysis', formatVersion: 1, exportedAt: new Date().toISOString(), sourceAnalysis: lab.record ? { id: lab.record.id, revision: lab.record.revision } : null, ...input, methods: { inferencePerformed: false, inferenceMetadata: 'source-reported; not independently verified', ranking: isJunctions ? 'dataset order per track; shared reference/alternate signal scale per displayed track' : isMeasurements ? 'source row order; no aggregation performed by the workspace' : 'absolute magnitude within exact scorer/track/unit', missingValues: 'not filled with zero', junctionRendering: 'Both endpoints and strand retained. REF/ALT use one scale per track. Null is missing, never zero. Overlapping arcs are clipped only for display.', trackRendering: 'Declared half-open bins use constant segments; missing bins are not connected. Undeclared bins render as points.' } }, null, 2), 'helix-analysis.json', 'application/json', exportSignal);
+        downloadFile(JSON.stringify({ format: 'helix-analysis', formatVersion: 1, exportedAt: new Date().toISOString(), sourceAnalysis: lab.record ? { id: lab.record.id, revision: lab.record.revision } : null, ...input, methods: { inferencePerformedDuringExport: false, inferenceMetadata: 'source-reported; not independently verified', ranking: isJunctions ? 'dataset order per track; shared reference/alternate signal scale per displayed track' : isMeasurements ? 'source row order; no aggregation performed by the workspace' : 'absolute magnitude within exact scorer/track/unit', missingValues: 'not filled with zero', junctionRendering: 'Both endpoints and strand retained. REF/ALT use one scale per track. Null is missing, never zero. Overlapping arcs are clipped only for display.', trackRendering: 'Declared half-open bins use constant segments; missing bins are not connected. Undeclared bins render as points.' } }, null, 2), 'helix-analysis.json', 'application/json', exportSignal);
       } else if (kind === 'csv') downloadFile(dataset.kind === 'junctions' ? datasetToCSV({ ...dataset, rows: junctionRows, trackMetadata: junctionMetadata }) : dataset.kind === 'tracks' ? datasetToCSV({ ...dataset, rows: selectedTrackRows, trackMetadata: selectedTrackMetadata.length ? selectedTrackMetadata : undefined }) : dataset.kind === 'measurements' ? datasetToCSV({ ...dataset, rows: measuredRows }) : csvForRows(rows), 'helix-selected-data.csv', 'text/csv;charset=utf-8', exportSignal);
       else { if (!svg.current) throw new Error(isMeasurements ? 'Choose Measurements before exporting an image.' : 'Choose a figure view before exporting an image.'); await exportFigure(svg.current, kind, 'helix-figure', { title: settings.title, source: dataset.provenance.sourceLabel, sourceUrl: dataset.provenance.sourceUrl, assembly: dataset.provenance.assembly, status: isMeasurements ? 'Experimental measurements · no matched predictions' : inferenceSourceStatus(dataset.provenance), provenance: dataset.provenance, settings, experiment: dataset.kind === 'measurements' ? dataset.experiment : undefined, junctions: dataset.kind === 'junctions' ? { interval: dataset.interval, variant: dataset.variant, rows: shownJunctionRows, trackMetadata: junctionMetadata } : undefined, tracks: isTracks ? selectedTrackGroups.slice(0, settings.limit).map(group => ({ chromosome: group.rows[0].chromosome, track: group.rows[0].track, metadata: group.metadata || null })) : undefined }, exportSignal); }
       if (mounted.current && !exportSignal.aborted) setMessage(`${kind.toUpperCase()} exported`);
@@ -155,6 +157,7 @@ export default function App() {
       <span className="app-context">Variant analysis</span>
       <div className="appbar-right">
         <span className="local-save-state" role="status">{workspaceReady ? storageLabel : 'Opening workspace…'}</span>
+        <button className="button primary" disabled={!workspaceReady} onClick={() => setPredictionOpen(true)}>New prediction</button>
         <button className="button dark" aria-label="Open data" disabled={!workspaceReady} onClick={() => setImportKind('json')}><Upload size={15}/>Open data</button>
       </div>
     </header>
@@ -199,6 +202,7 @@ export default function App() {
         {dataset.kind === 'scores' && settings.chart !== 'table' && rows.length > 0 && <section className="data-preview" aria-label="Selected source data"><div className="data-preview-header"><strong>Underlying data <span style={{ color:'#a0acbd',marginLeft:7 }}>{rows.length} rows</span></strong><button onClick={() => setSettings({ chart:'table' })}>Open table <ArrowUpRight size={10}/></button></div><DataTable rows={rows} limit={4}/></section>}
       </div></main>
     {importKind && <ImportDialog initialKind={importKind} onClose={() => setImportKind(null)} onImport={(value, importedSettings) => { lab.openDataset(value, importedSettings); setControls(false); setMessage(`${value.rows.length} records imported`); }}/>}
+    {predictionOpen && <Modal title="Run AlphaGenome" onClose={() => setPredictionOpen(false)}><PredictionPanel onOpen={value => { lab.openDataset(value); setPredictionOpen(false); setControls(false); setMessage('Google AlphaGenome prediction opened'); }}/></Modal>}
     {evidence && <EvidenceDrawer dataset={dataset} settings={settings} onClose={() => setEvidence(false)}/>}
 
     </fieldset>

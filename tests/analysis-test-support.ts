@@ -11,7 +11,7 @@ import type { AnalysisInput, AnalysisRecord } from '../shared/analysis-record.ts
 import type { ScoreDataset } from '../shared/analysis.ts';
 
 const migration = readFileSync(new URL('../deploy/higgsfield/migrations/0002_helix.sql', import.meta.url), 'utf8');
-export const ORIGINS = { local: 'http://127.0.0.1:4191', cloud: 'https://helix-dna-lab.higgsfield.app' } as const;
+export const ORIGINS = { local: 'http://127.0.0.1:4191', cloud: 'https://genetic-engineering-lab.higgsfield.app' } as const;
 export type Backend = keyof typeof ORIGINS;
 export type Actor = 'owner' | 'other' | 'anonymous';
 export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';

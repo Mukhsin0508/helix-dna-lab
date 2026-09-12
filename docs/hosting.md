@@ -1,6 +1,6 @@
 # Higgsfield hosting
 
-The Helix website is live at [helix-dna-lab.higgsfield.app](https://helix-dna-lab.higgsfield.app/) and listed on the [Higgsfield community](https://higgsfield.ai/supercomputer/apps/00961b5d-05b8-430c-aef1-825c7c4368bf/view).
+The website is live at [genetic-engineering-lab.higgsfield.app](https://genetic-engineering-lab.higgsfield.app/) and listed on the [Higgsfield community](https://higgsfield.ai/supercomputer/apps/00961b5d-05b8-430c-aef1-825c7c4368bf/view). The subdomain was renamed from `helix-dna-lab` on 12 September 2026. Release snapshots below retain the evidence and configuration from their original dates.
 
 ## No-signup browser workspace
 
@@ -12,7 +12,9 @@ React and SVG render the analytical figures in the visitor's browser. The older 
 
 The analytical API accepts bounded numerical datasets with provenance. Native Helix passkey accounts own new saved analyses. Reads, changes, deletion, lists and conflict responses are scoped to the owner; a private URL grants no access to someone else. Historical unowned analyses remain public and read-only, and their source payloads are preserved. The unused legacy session and comparison-workspace APIs remain public collaboration capabilities and must not be used for private notes or research data. This account release protects the analytical workspace, not those retired workflows. The application sets a no-referrer policy and no-store API responses. Cookie-authorized state changes enforce same-origin browser requests; scoped bearer analysis calls do not require a browser Origin header. The API applies a 16 KiB body limit (512 KiB for workspace PATCH requests; 2 MiB for analysis POST/PATCH requests), strict schemas, and revision checks. Discovery endpoints are exempt from the 180-request-per-minute IP budget.
 
-The real GPU service remains separate. No inference credentials or model weights are included. When an authorized service is running, only the server should call it with a private token. The browser must receive validated prediction results, never that token.
+The hosted AlphaGenome path uses a CPU container as a proxy to Google's inference service. The official Python client is pinned to `alphagenome==0.9.0`; no model weights or local GPU are needed for this route. The owner's AlphaGenome-issued key is still missing, so an actual authenticated prediction has not been verified. Configure it through [hosted API setup](hosted-api-setup.md). The browser receives validated prediction data and provenance, never the service key. The earlier self-hosted GPU runner remains a separate option.
+
+The current approved hosted origin is exactly `https://genetic-engineering-lab.higgsfield.app`. Browser storage, passkeys and access-token audiences are origin-bound; the rename does not establish migration of drafts, credentials or optional provider connections from the former hostname. Exported analysis JSON remains portable.
 
 ## Source mapping
 
@@ -27,6 +29,8 @@ To synchronize a future revision in the Higgsfield MCP checkout:
 5. Keep `three`, `lucide-react`, and `@types/three` dependencies installed. Pin `@simplewebauthn/server` to `14.0.1` and `@simplewebauthn/browser` to `14.0.0`. Apply `0003_accounts.sql` and `0004_integration_tokens.sql`; runtime initialization handles additive columns in previously created account or analysis tables. Preserve the starter's error reporting, design-inspector gate, and platform binding helpers.
 6. Run the cloud build and typecheck. Commit, push using `website_repo_access`, then deploy using `deploy_website`.
 7. Verify the public browser, analytical API, D1 persistence after reload, imports, filters and exports. Keep the legacy session checks when changing those handlers. A successful build alone is not deployment verification.
+
+For hosted prediction releases, also include `deploy/higgsfield/container/`, its `inference/hosted/` runner copy, and the container configuration in `app.manifest.json`. Set the owner's secret through the platform UI, never in the checkout. Run the real example and inspect its result after deployment; passing offline container tests does not establish Google connectivity or model execution.
 
 Local checks: `npm test` covers both the session and workspace handlers, alongside local API and client recovery tests. The tests exercise the actual handler through an injected D1 interface, including concurrent writes and database reopen persistence.
 
@@ -60,6 +64,6 @@ The account UI uses browser passkeys and the same shared verification code on No
 
 Import, plotting and export still work anonymously. Saving prompts for a passkey; My analyses lists only the current account's bounded summaries. An explicit sign-in-to-save action can carry an anonymous draft into that account. Private analysis data is not persisted to browser storage. Account changes invalidate requests, figures, dialogs and pending downloads across tabs. There is no email recovery: users should add a second passkey while they can sign in. Display names are labels, not verified identities.
 
-Local account origins are localhost and 127.0.0.1 on ports 4190/4191; the hosted origin is exactly https://helix-dna-lab.higgsfield.app. RP ID comes from this fixed configuration, not arbitrary request headers. API automation uses scoped access tokens created in the account dialog. They grant analytical access only; each token is bound to its issuing origin and stored as a hash. See [assistant integration](assistant-integration.md). No model endpoint or inference was added in this release.
+At this account release, local origins were localhost and 127.0.0.1 on ports 4190/4191 and the hosted origin was exactly https://helix-dna-lab.higgsfield.app. RP ID came from this fixed configuration, not arbitrary request headers. API automation used scoped access tokens created in the account dialog. They grant analytical access only; each token is bound to its issuing origin and stored as a hash. See [assistant integration](assistant-integration.md) for the current workflow. No model endpoint or inference was added in this release.
 
 Validation and deployment evidence: [account release checks](account-release-validation.md).

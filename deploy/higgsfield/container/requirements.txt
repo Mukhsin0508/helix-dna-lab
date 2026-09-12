@@ -1,0 +1,2 @@
+# The wrapper uses only the standard library; provider dependencies are pinned by the runner.
+-r inference/hosted/requirements.txt

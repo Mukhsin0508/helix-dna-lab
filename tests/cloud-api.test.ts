@@ -52,7 +52,7 @@ class SqliteD1 {
 }
 
 type Handler = ReturnType<typeof createLabHandler>
-const origin = 'https://helix-dna-lab.higgsfield.app'
+const origin = 'https://genetic-engineering-lab.higgsfield.app'
 function request(path: string, method = 'GET', data?: unknown, headers: Record<string, string> = {}): Request {
   return new Request(origin + path, {
     method,

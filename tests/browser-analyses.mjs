@@ -15,7 +15,7 @@ try{
  await page.goto(base); await page.getByRole('textbox',{name:'Figure title'}).waitFor();
  await page.getByRole('button',{name:'Save analysis',exact:true}).isEnabled();
  const recipe=JSON.parse((await download('Complete analysis')).bytes.toString());
- assert.equal(recipe.dataset.rows.length,524);assert.equal(recipe.methods.inferencePerformed,false);assert.equal(recipe.dataset.provenance.mode,'published-example');
+ assert.equal(recipe.dataset.rows.length,524);assert.equal(recipe.methods.inferencePerformedDuringExport,false);assert.equal(recipe.dataset.provenance.mode,'published-example');
  assert.equal(recipe.dataset.rows.find(r=>r.variant==='chr16:636337:G>A'&&r.modality==='ATAC').score,0.11435222625732422);
  checks.push('exact published dataset and provenance');
  await page.getByRole('textbox',{name:'Figure title'}).fill('QA · variant analysis');
