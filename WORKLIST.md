@@ -4,6 +4,8 @@
 
 The owner selected a researcher-focused analytical workspace using AlphaGenome Atlas as the reference: compare source results, inspect exact values and methods, and iterate on reproducible figures. Generated imagery and the outcome/replay interface are superseded as the product's main workflow. The full goal remains a DNA Engineering Lab, including real model execution and experimental validation; figure generation alone does not complete it.
 
+Assistant use now means direct operation of the website with available browser tools. No AllMCP credential connection or assistant API/token integration is required for launch. The primary workspace has no signup; local drafts and exports require no account or integration key. Backend private-record protections remain unchanged. Browser-tool availability depends on the assistant client and session.
+
 - [x] Study official Atlas tools, API, data access, scorer semantics and limitations.
 - [x] Retrieve and preserve a real published 524-row AlphaGenome snapshot with exact numbers and source provenance.
 - [x] Implement typed CSV/JSON imports, coordinate validation and compatible comparison groups.
@@ -26,7 +28,9 @@ The owner selected a researcher-focused analytical workspace using AlphaGenome A
 - [ ] Add prediction-versus-measurement analysis once matching predictions, endpoints and assay contexts are available.
 - [ ] Validate utility with a research workflow and held-out measurements.
 - [x] Add account ownership before accepting private genomic results or paid model execution.
-- [ ] Expose the analytical tools through AllMCP to ChatGPT and Claude.
+- [x] Remove signup and account prompts from the primary workspace; autosave validated drafts in the browser.
+- [x] Verify local browser source inspection, exact values, rapid edits, reload, tab isolation and actual SVG/PNG/CSV/JSON downloads.
+- [x] Deploy no-signup cloud revision `4ae5df4` and verify public DNM1 and junction journeys, all exports, local autosave/reload, tab isolation and mobile layout with zero account requests or server writes.
 
 ## Historical direction: outcome and evidence workspace
 
@@ -69,12 +73,11 @@ Saving a hypothesis or changing an illustration does not run a model. Vaccine su
 - [ ] Connect the lab backend to the verified GPU service; persist and display actual reference/alternate numerical tracks.
 - [x] Deploy the lab and API to Higgsfield; verify D1 database and runtime requirements.
 - [ ] Verify the selected model/data license permits the intended public deployment.
-- [ ] Add the lab API as an AllMCP provider (the owner operates AllMCP).
-- [ ] Connect ChatGPT first, then Claude, as the conversation interface; no in-app chat or LangChain needed for the MVP.
-- [ ] Link each chat to the same experiment session displayed in the website.
-- [ ] Provide MCP tools to create, edit, run, inspect, compare, and export experiments.
+- [x] Add the analytical lab API as an AllMCP provider (the owner operates AllMCP); production release completed through PR 620. User credential connection remains separate.
+- Superseded as launch requirements: a stored AllMCP connection, separate assistant API integration and chat-to-session wiring. An assistant with browser interaction can operate the existing website directly.
+- Optional existing infrastructure: the released AllMCP provider exposes numerical analysis tools. It does not run experiments or model inference.
 - Superseded: on-demand Higgsfield concept generation; the owner removed it from the analytical workflow.
-- [ ] Consider integration into Higgsfield's official MCP after validation.
+- Optional future work: integration into Higgsfield's official MCP, only if requested after validation.
 
 ## Product constraints
 
@@ -86,7 +89,9 @@ Saving a hypothesis or changing an illustration does not run a model. Vaccine su
 
 This file records the agreed build scope. Checkboxes track delivered work, not promises.
 
-## Native analytical accounts
+## Historical native analytical accounts
+
+The account UI was removed from the primary workspace on September 12 at the owner's request. The API and its private-data protections remain.
 
 - [x] Add real passkey registration/authentication and hashed server sessions, with exact origins and single-use challenges.
 - [x] Give new analyses account ownership; enforce private reads, list, revision-safe update/delete and conflict privacy in shared local/hosted handlers.
@@ -95,11 +100,21 @@ This file records the agreed build scope. Checkboxes track delivered work, not p
 - [x] Verify the account release on the public Workers/D1 runtime and record evidence (`2c9a166`; 143 tests plus real browser account journeys).
 - [ ] Add account-authorized model jobs after checkpoint access and the first verified inference.
 
-## Assistant integration
+## Browser-assisted analytical workflow
+
+- [x] Make direct browser operation the primary assistant route; no connector or integration key is required for public examples.
+- [x] Verify all 12 DNM1 measurements, source inspection, variant filtering, figure-title changes and full JSON/figure exports through browser interaction.
+- Superseded: private save/signup workflow. Browser drafts and portable files are now the primary route.
+
+## Optional existing assistant API/provider release
+
+These completed capabilities remain available. Connecting a user's AllMCP account is not a launch requirement.
 
 - [x] Add scoped, expiring and revocable account access tokens for the analytical API; keep passkey and token management cookie-only.
 - [x] Implement the native AllMCP Helix provider in an isolated worktree: identity, list, read, create, revision-safe update and full recipe export.
 - [x] Deploy token support and verify the provider against real public Helix requests, including private create/update, stale revision conflict and exact recipe export.
 - [x] Reopen the provider-created analysis in the signed-in browser and verify the same saved title and 12 source measurements; delete the disposable analysis and revoke its token after QA.
-- [ ] Deploy the provider to AllMCP and connect an authorized user through its browser credential flow.
-- [ ] Verify the same analysis from ChatGPT or Claude and the website.
+- [x] Merge AllMCP PR 620 as `20be84c348b6cfb533d64e5c7595db5355d213d7` and deploy the provider to production; run `34597927894` succeeded at `2026-09-11T12:17:15Z`, with production health HTTP 200/OK.
+- [x] Verify production FastMCP authentication without a mocked context, enabled Helix provider discovery, connection-required category behavior and the signed browser credential form for the verified user's AllMCP tenant.
+- Optional, not required for launch: complete a user-authorized Helix credential connection in AllMCP if that route is requested later. The checked account has no Helix connection.
+- [x] Revoke the temporary AllMCP verification key and confirm after a full key-list reload that only the original four keys remain. Clear the temporary browser-tool variable and clipboard copy, and stop the local verification server. Cleanup of the earlier disposable Helix analysis/token is also complete.

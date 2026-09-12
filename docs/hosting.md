@@ -2,6 +2,10 @@
 
 The Helix website is live at [helix-dna-lab.higgsfield.app](https://helix-dna-lab.higgsfield.app/) and listed on the [Higgsfield community](https://higgsfield.ai/supercomputer/apps/00961b5d-05b8-430c-aef1-825c7c4368bf/view).
 
+## No-signup browser workspace
+
+The primary frontend now saves validated datasets and figure settings in browser IndexedDB. It does not call account endpoints or send imported results to D1. Public source links are fetched without cookies and must be read-only legacy-public envelopes. Existing private D1 records and authenticated API permissions are unchanged. Cloud revision `4ae5df4` is deployed and public browser checks passed. See [release checks](no-signup-release.md).
+
 ## Runtime
 
 React and SVG render the analytical figures in the visitor's browser. The older Three.js scene remains as unused source. TanStack Start routes serve the API, and a D1 database stores analyses, sessions and comparison workspaces with atomic revision checks. This deployment does not start an AlphaGenome GPU or stream a remote GPU framebuffer.

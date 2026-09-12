@@ -8,11 +8,11 @@
     "build": "tsc --noEmit && vite build",
     "start": "tsx server/index.ts",
     "test": "tsx --test tests/*.test.ts",
-    "test:browser": "node tests/browser-analyses.mjs",
+    "test:browser": "node tests/browser-local-workspace.mjs",
     "test:junction-browser": "node tests/browser-junctions.mjs",
     "import:gpu-result": "tsx inference/import-service-result.ts",
-    "test:integrations": "node tests/browser-integration-tokens.mjs",
-    "test:accounts": "node tests/browser-accounts.mjs && node tests/browser-account-ui.mjs"
+    "test:integrations": "node --import tsx --test tests/integration-tokens.test.ts",
+    "test:accounts": "node --import tsx --test tests/auth.test.ts tests/auth-body.test.ts tests/account-ownership.test.ts"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",

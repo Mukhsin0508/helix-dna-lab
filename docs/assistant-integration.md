@@ -1,18 +1,14 @@
-# Connect an assistant to Helix
+# Use an assistant in Helix
 
-Helix exposes the same saved numerical analyses to the website and an authenticated API. The assistant can inspect data and, with edit permission, save a figure recipe that you reopen in the lab.
+The primary workflow is an assistant operating the [Helix website](https://helix-dna-lab.higgsfield.app/) through browser controls: open an example, inspect values and source methods, adjust the figure and export it. No AllMCP connection or integration token is required for this route. The complete browser workflow now works without signup: local drafts, source inspection, chart iteration and portable exports.
 
-**Status — 11 September 2026:** access-token support is deployed to [Helix](https://helix-dna-lab.higgsfield.app/). Public browser checks pass for creation, scopes, one-time display, revocation, mobile controls and delayed-response handling. Eight registered AllMCP tool calls passed against real public Helix requests; the browser reopened the same private analysis with all 12 source measurements intact. The AllMCP credential lookup was substituted in memory for this test. Its provider is not deployed or connected, and no ChatGPT or Claude connection has been verified. These are separate delivery steps.
+Follow the [browser-assisted workflow](browser-assistant-workflow.md). The assistant needs interactive browser tools in the chosen client/session. OpenAI documents page interaction and form entry through [cloud browser in ChatGPT Work](https://help.openai.com/en/articles/20001280-using-cloud-browser-in-chatgpt); availability and website support vary. This does not establish Helix compatibility in every client. The automated browser journey is verified in the release notes; this does not establish compatibility with every assistant client.
 
-## Create access
+The deployed API and AllMCP provider remain optional, previously completed infrastructure. A user's AllMCP credential connection is not a launch requirement. Historical provider and browser checks are recorded in [release validation](assistant-integration-validation.md); they do not establish a completed ChatGPT or Claude browser workflow. The temporary AllMCP verification key was revoked and its absence confirmed after a full key-list reload.
 
-1. Open [helix-dna-lab.higgsfield.app](https://helix-dna-lab.higgsfield.app/) and sign in with your passkey.
-2. Open **Account → Connect an assistant → Create access token**.
-3. Label the connection, for example `AllMCP`. Start with **Read only**. Choose **Read and edit** only when the assistant should create, update or delete analyses.
-4. Choose 7, 30 or 90 days. The default is 30 days.
-5. Copy the token directly into the integration's private credential field. It is shown once. Do not paste it into a conversation, URL, source file or screenshot.
+## Optional API access
 
-The account panel lists active tokens, expiry and last use. Use **Revoke → Confirm revoke** to disconnect one. Signing out of the browser does not revoke an already-issued integration token. An expired or revoked token cannot authenticate; create a replacement when needed. Each account can have up to 20 active tokens.
+This section records retained backend capabilities. Account creation and token-management controls are no longer exposed by the no-signup website. Existing authorized API credentials keep their original scope and expiry; this release creates no new credentials. Browser users do not need this route.
 
 ## API connection available to a backend client
 
@@ -31,9 +27,9 @@ Read tokens grant `analyses:read`; edit tokens grant both `analyses:read` and `a
 
 See the [live OpenAPI contract](https://helix-dna-lab.higgsfield.app/api/openapi.json) and [analytical API guide](api.md) for fields and error responses. A 409 response means the revision changed: retrieve the latest record and reconcile or save a copy instead of overwriting it.
 
-## AllMCP connection after provider deployment
+## Optional existing AllMCP provider
 
-Once the **Helix** provider is released in AllMCP:
+The **Helix** provider is available in production AllMCP:
 
 1. Request `connect_provider(provider_key='helix')` through AllMCP and open its returned browser link.
 2. Paste the token into **Helix personal access token** on the connection page. The internal credential field is `api_key`.
@@ -43,7 +39,7 @@ The implemented provider tools are `helix_get_account`, `helix_list_analyses`, `
 
 Use this provider through the supported assistant's AllMCP connection. The Helix website is an HTTP API, not itself an MCP endpoint; do not enter its URL as a ChatGPT or Claude MCP server.
 
-First verify a read: “List my saved Helix analyses and open the DNM1 analysis.” With edit access, a useful next task is: “Keep the dataset unchanged, update its figure settings, and save a private copy.” Open the returned analysis in Helix to inspect it. These are intended workflows to verify after the provider is deployed, not claims that an assistant is connected today.
+If choosing this optional route later, first verify a read: “List my saved Helix analyses and open the DNM1 analysis.” With edit access, a useful next task is: “Keep the dataset unchanged, update its figure settings, and save a private copy.” Open the returned analysis in Helix to inspect it. No user's stored Helix credential or assistant conversation was verified through this provider; neither is required for the browser-operated launch.
 
 ## Preserve the research record
 

@@ -1,8 +1,8 @@
 # Helix DNA Lab
 
-An analytical workspace for researchers comparing genetic variant results. Import source data, select an assay and scoring method, inspect reference and alternate signals, and save reproducible figures with their inputs. React, TypeScript and SVG in the browser; Fastify/SQLite locally and TanStack Start/D1 when hosted.
+An analytical workspace for researchers comparing genetic variant results. Import source data, select an assay and scoring method, inspect reference and alternate signals, and export reproducible figures with their inputs. No signup: edits save in this browser. React, TypeScript and SVG in the browser; Fastify/SQLite locally and TanStack Start/D1 when hosted.
 
-[Public site](https://helix-dna-lab.higgsfield.app/) · [Research and data sources](docs/ANALYTICAL_LAB.md) · [Worklist](WORKLIST.md)
+[Public site](https://helix-dna-lab.higgsfield.app/) · [Research and data sources](docs/ANALYTICAL_LAB.md) · [Browser assistant workflow](docs/browser-assistant-workflow.md) · [Worklist](WORKLIST.md)
 
 ## Run locally
 
@@ -31,7 +31,7 @@ After building, `npm start` serves the compiled frontend and API together at **h
 - Import splice-junction JSON and compare paired REF/ALT arcs on one signal scale per track, with the exact endpoint values available in a table.
 - Experimental datasets have their own measured-value dot plot and table. Assay, aggregation, conditions and unknown replicate counts remain explicit; they cannot be switched to model quantiles.
 - Export the figure as SVG/PNG, the data as CSV, and the complete analysis recipe as JSON.
-- Save the dataset and settings in SQLite or D1. Reload or share the saved analysis with optimistic revision checks to prevent overwriting another edit.
+- Keep the current dataset and figure settings in browser storage automatically. Reload to resume; export JSON to move the analysis to another browser or share it.
 
 The T-cell dataset is a **historical published model-output example** with an upstream notebook execution timestamp of July 21, 2025. It includes four variants and T-cell tracks. Its model version was not recorded. It is not a fresh Atlas query, AVI data, the user's requested DNM1 variant, or genomic track arrays. See [source artifacts and provenance](data/atlas/README.md).
 
@@ -69,9 +69,13 @@ Higgsfield-generated imagery is not part of the analytical interface. Earlier il
 
 `POST /api/analyses` stores `{dataset, settings}`. `GET /api/analyses/:id` retrieves it. `PATCH /api/analyses/:id` requires `{revision, dataset, settings}` and returns 409 with the latest record on conflict. Schemas and endpoint documentation are exposed at `/api/openapi.json`.
 
-Imports and drafts stay in the current browser until saved. Sign in with a passkey to save a private analysis; its link requires the owning account. Historical public examples are read-only, with an explicit option to save a private copy. Each input is capped at 5000 rows and 2 MiB.
+The website has no signup, account checks or cloud-save prompts. Imports and edits stay in IndexedDB in this browser. Each document writes a separate draft branch so concurrent tabs do not overwrite one another; reload restores the committed branch. Wait for “Saved in this browser” before closing. Storage failures remain visible, and JSON export remains available. Clearing site data removes browser drafts. Export JSON for a portable copy. Each input is capped at 5000 rows and 2 MiB.
 
-Scoped, expiring access tokens let an external assistant work with the same private analyses. Read-only is the default; editing requires an explicit grant. The native AllMCP provider is implemented and its registered tools have passed real requests against public Helix, including reopening the same figure in the browser. AllMCP production deployment and a connected ChatGPT/Claude session remain pending. See [assistant integration](docs/assistant-integration.md).
+Historical public analysis links are loaded without cookies and are never changed. Editing one creates a browser draft and removes its source URL parameter. Private server records are never loaded into this anonymous workspace; existing API ownership protections are unchanged.
+
+An assistant with interactive browser tools can use the website directly; no AllMCP connection or integration token is required. No account is needed for the whole analytical workflow. Browser-tool availability depends on the client and session. Follow the [browser assistant workflow](docs/browser-assistant-workflow.md) and [release checks](docs/no-signup-release.md).
+
+Existing scoped access tokens and the deployed AllMCP provider remain backend compatibility features for previously authorized private analyses. Their account management UI is no longer part of this release. Read-only is the default; editing requires an explicit grant. The provider passed real public Helix requests and production discovery checks, but no stored user connection or ChatGPT/Claude conversation has been verified. See [optional assistant integration](docs/assistant-integration.md).
 
 The frontend, local API and hosted adapter share the same dataset and figure schemas. See [hosting](docs/hosting.md) for deployment status and synchronization.
 
@@ -79,4 +83,4 @@ The frontend, local API and hosted adapter share the same dataset and figure sch
 
 Live Atlas lookup and AlphaGenome inference are not connected. The official static AVI archive returned HTTP 500 during verification; no requested DNM1 score was retrieved. Rich Atlas API access and self-hosted predictions require authorized access. No clinical efficacy, disease-risk or whole-organism phenotype probabilities are calculated.
 
-Next stages are actual model/Atlas jobs, evaluation against compatible experimental measurements, and AllMCP tools for the same saved analyses. No separate in-app chat is planned. The broad DNA Engineering Lab goal is ongoing; this release provides its numerical analysis and figure-generation core.
+Next stages are actual model/Atlas jobs and evaluation against compatible experimental measurements. No separate in-app chat or AllMCP connection is required. The broad DNA Engineering Lab goal is ongoing; this release provides its numerical analysis and figure-generation core.
