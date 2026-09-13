@@ -1,6 +1,6 @@
 # Hosted AlphaGenome integration checks
 
-Verified 12 September 2026.
+Software checks verified 12 September 2026. Deployment status updated 13 September 2026.
 
 - Official Python client pinned to `alphagenome==0.9.0`; 16 runner tests use actual SDK data containers with explicitly synthetic arrays and mocked network/model calls.
 - Ten container coordinator tests and six Python service wrapper tests cover request isolation, idempotency, deadlines, bounded output, result validation and sanitized failures.
@@ -17,8 +17,19 @@ The local fixture server and its `qa-hosted/` artifacts are test-only and exclud
 
 ## Deployment handoff
 
-The rename release is live and its existing DNM1 analysis link loads all 12 measurement records at the new domain. The hosted prediction feature itself is **not deployed**. Higgsfield `website_repo_access(push)` repeatedly returns `INVALID_ARGUMENT` with a generic repository failure, even after preserving the checkout, obtaining a fresh checkout, and cherry-picking the committed feature onto the current remote parent `2109448`. There are no uncommitted changes or merge conflicts in that prepared cloud checkout. The provider withholds its underlying diagnostic.
+The rename release is live, and its existing saved DNM1 view still loads all 12 measurement records after reload at the new domain. The hosted prediction source was successfully pushed through Higgsfield on **13 September 2026 at 01:54:28 UTC**, at cloud commit **`003a8da`** (parent `2109448`). The cloud application TypeScript check passed. **Two deployment attempts failed; the new hosted prediction features are not live.** A successful push and typecheck do not establish deployment.
 
-Prepared cloud commit: `b66f38e` (same feature tree as the originally checked `37a2cbc`). Site ID: `f03029cb-ce1b-4736-ad02-3b026147a065`. Checkout: `/home/user/website-8a18cec008b4e9a094087c23`; a complete backup and bundle were retained in the sandbox, which is temporary. Permanent source and deployment mirror are stored in the private GitHub repository. No provider credentials were accessed or copied.
+The earlier push blocker is resolved. On 12 September, `website_repo_access(push)` repeatedly returned `INVALID_ARGUMENT` with a generic repository failure, including after a fresh checkout and cherry-pick onto `2109448`; the provider did not expose its underlying diagnostic. The earlier prepared commits `b66f38e` and `37a2cbc` are historical preparation records, not the current pushed revision.
 
-After the repository service is working, push the prepared source before deploying. Add the official `@cloudflare/containers` dependency pinned to `0.3.7` to the cloud app and retain its lockfile. Deploy only after push succeeds; recheck `/api/predictions/health` and the public form. Then add the owner's API key in website settings and redeploy to apply it before the first real inference check. A secret-presence health result is not authentication proof.
+Site ID: `f03029cb-ce1b-4736-ad02-3b026147a065`. Permanent source and the deployment mirror remain in the private GitHub repository; temporary checkout backups were retained during the earlier recovery. No provider credentials were accessed or copied.
+
+Both deployment attempts returned this exact build log:
+
+```text
+build started: slug=genetic-engineering-lab env=prod (modal)
+[build] FAILED: container app: not supported on the modal build backend, redeploy once has_container is set
+```
+
+The application manifest matches the container guide. The available public MCP tools expose no backend-selection or `has_container` control, and no API request ID was returned. The required Higgsfield action is to enable or provision a container-supported backend for site `f03029cb-ce1b-4736-ad02-3b026147a065`, then redeploy the pushed source. The log establishes the deployment blocker; no deeper cause has been verified.
+
+After that deployment succeeds, verify `/api/predictions/health` and the public prediction form at the renamed domain. Retain the official `@cloudflare/containers` dependency pinned to `0.3.7` and the cloud lockfile. The owner still needs to configure `ALPHAGENOME_API_KEY` in website settings and redeploy if required to apply it before the first real inference check. No authenticated Google inference is verified. A secret-presence health result is not authentication proof.
