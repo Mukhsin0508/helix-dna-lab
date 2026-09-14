@@ -1,5 +1,25 @@
 # Higgsfield replacement site
 
+## Latest state: 15 September 2026
+
+This section supersedes the earlier `has_container` blocker and provisioning handoff below. The interrupted retry completed with a terminal failure, but it **did start a Modal/Kaniko image build**. Container provisioning is no longer the first failing gate. The replacement remains undeployed.
+
+Verified progression (build log times are UTC on 14 September):
+
+- 20:23: image build started; `pip install alphagenome==0.9.0` failed after connection resets accessing the package index.
+- Official PyPI metadata independently confirms version 0.9.0 exists and supports Python >=3.10. The editing sandbox could reach PyPI successfully. The pip message “No matching distribution” does not establish a missing version here.
+- Cloud commit `b1b811a` selected explicit HTTPS PyPI and the system CA bundle, keeping TLS verification enabled. The 20:51 build still failed with connection resets.
+- Cloud commit `a64102f` pinned 47 Linux amd64 / CPython 3.12 wheels and their official URLs/hashes. Direct image-builder downloads from `files.pythonhosted.org` also failed with a TCP connection reset at 21:01.
+- Current cloud commit **`dbb7d50`** stages those verified public dependencies as one Higgsfield-hosted archive and installs offline with `--require-hashes`, followed by `pip check`. The 21:11 build failed fetching the archive from Higgsfield's CloudFront storage, again with a TCP connection reset. It did not reach package installation or application startup.
+
+The uploaded archive contains only public Python dependencies, no DNA records, source credentials or user data. Upload returned HTTP 200 and was confirmed by Higgsfield. Its URL is recorded in `deploy/higgsfield/container/wheels.lock.json`; SHA-256 is `ded9580ec6403c461a1bb424ce9164ee37e7ab79f8035663370c737379bd25ed`. Each of 47 downloaded wheel digests matched official PyPI metadata. Dependency metadata was checked for Linux CPython 3.12 with zero unresolved requirements. This is dependency validation, not a successful runtime or inference test.
+
+The cloud Dockerfile, requirements lock and wheel provenance manifest have been mirrored into the local deployment source. No wheel binaries are committed. The old app remains unpublished; no further database changes were made. No new API key or live prediction was verified.
+
+**Current platform handoff:** restore working HTTPS downloads in the Kaniko build environment for replacement `46d5b44c-60a8-4bb9-ba5f-309a42b2290c`. PyPI, Python's file host and Higgsfield's own artifact host all returned connection resets from the image builder, while the editing sandbox could download and upload the dependency bundle. Inspect the builder's egress/proxy configuration; the precise network cause is not yet proven. After that, deploy pushed commit `dbb7d50` and verify installation, startup and the web application. No build is known to be running after the final terminal failure above.
+
+## Earlier migration record
+
 Updated 14 September 2026. The selected approach stays on Higgsfield: create a fresh standalone website and test clean provisioning with the existing analytical application. This is a hosting replacement, preserving the no-signup workspace, published source data and analytical figures. It does not add generated imagery or a different product.
 
 ## Exact migration targets
